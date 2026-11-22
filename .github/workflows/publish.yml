@@ -32,6 +32,13 @@ jobs:
             any::rmarkdown
             any::readr
             any::palmerpenguins
+            any::gapminder
+            any::dplyr
+            any::tidyr
+            any::ggplot2
+            any::stringr
+            any::lubridate
+            any::forcats
 
       - name: Run every lesson example and exercise solution
         run: Rscript tests/check-lessons.R

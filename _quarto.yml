@@ -43,6 +43,14 @@ website:
           - lessons/day-03-vectors.qmd
           - lessons/day-04-data-frames-and-lists.qmd
           - lessons/day-05-functions-and-reading-data.qmd
+      - section: "Level 2: Intermediate"
+        contents:
+          - lessons/day-06-dplyr.qmd
+          - lessons/day-07-tidyr.qmd
+          - lessons/day-08-ggplot2.qmd
+          - lessons/day-09-control-flow.qmd
+          - lessons/day-10-functions.qmd
+          - lessons/day-11-strings-dates-factors.qmd
   page-footer:
     left: "© 2026 Abubakar Athman. Lessons CC BY 4.0, code MIT."
     right: "Built with [Quarto](https://quarto.org) and [webR](https://docs.r-wasm.org/webr/latest/)."

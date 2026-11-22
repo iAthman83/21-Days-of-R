@@ -77,50 +77,50 @@ Arguments, packages and CSV files
 ### Level 2: Intermediate
 
 ::: {.day-grid}
-::: {.day-card .soon}
-[Day 6 · coming soon]{.day-num}
+::: {.day-card}
+[Day 6]{.day-num}
 
-**Data wrangling with dplyr**
+**[Data wrangling with dplyr](lessons/day-06-dplyr.qmd)**
 
 filter, select, mutate, summarise, group_by
 :::
 
-::: {.day-card .soon}
-[Day 7 · coming soon]{.day-num}
+::: {.day-card}
+[Day 7]{.day-num}
 
-**Tidy data with tidyr**
+**[Tidy data with tidyr](lessons/day-07-tidyr.qmd)**
 
 Reshape, handle missing values, join tables
 :::
 
-::: {.day-card .soon}
-[Day 8 · coming soon]{.day-num}
+::: {.day-card}
+[Day 8]{.day-num}
 
-**Visualisation with ggplot2**
+**[Visualisation with ggplot2](lessons/day-08-ggplot2.qmd)**
 
 Build charts layer by layer
 :::
 
-::: {.day-card .soon}
-[Day 9 · coming soon]{.day-num}
+::: {.day-card}
+[Day 9]{.day-num}
 
-**Control flow**
+**[Control flow](lessons/day-09-control-flow.qmd)**
 
 if/else, case_when, loops
 :::
 
-::: {.day-card .soon}
-[Day 10 · coming soon]{.day-num}
+::: {.day-card}
+[Day 10]{.day-num}
 
-**Writing your own functions**
+**[Writing your own functions](lessons/day-10-functions.qmd)**
 
 Arguments, defaults, checks
 :::
 
-::: {.day-card .soon}
-[Day 11 · coming soon]{.day-num}
+::: {.day-card}
+[Day 11]{.day-num}
 
-**Strings, dates and factors**
+**[Strings, dates and factors](lessons/day-11-strings-dates-factors.qmd)**
 
 stringr, lubridate, forcats
 :::

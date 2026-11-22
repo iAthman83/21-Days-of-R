@@ -29,12 +29,12 @@ Lessons: [CC BY 4.0](LICENSE-CONTENT.md) · Code: [MIT](LICENSE)
 | 3 | Beginner | Vectors | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-03-vectors.html) | [`day-03-vectors.qmd`](lessons/day-03-vectors.qmd) |
 | 4 | Beginner | Data frames and lists | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-04-data-frames-and-lists.html) | [`day-04-data-frames-and-lists.qmd`](lessons/day-04-data-frames-and-lists.qmd) |
 | 5 | Beginner | Functions and reading data | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-05-functions-and-reading-data.html) | [`day-05-functions-and-reading-data.qmd`](lessons/day-05-functions-and-reading-data.qmd) |
-| 6 | Intermediate | Data wrangling with dplyr | Coming soon |  |
-| 7 | Intermediate | Tidy data with tidyr | Coming soon |  |
-| 8 | Intermediate | Visualisation with ggplot2 | Coming soon |  |
-| 9 | Intermediate | Control flow | Coming soon |  |
-| 10 | Intermediate | Writing your own functions | Coming soon |  |
-| 11 | Intermediate | Strings, dates and factors | Coming soon |  |
+| 6 | Intermediate | Data wrangling with dplyr | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-06-dplyr.html) | [`day-06-dplyr.qmd`](lessons/day-06-dplyr.qmd) |
+| 7 | Intermediate | Tidy data with tidyr | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-07-tidyr.html) | [`day-07-tidyr.qmd`](lessons/day-07-tidyr.qmd) |
+| 8 | Intermediate | Visualisation with ggplot2 | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-08-ggplot2.html) | [`day-08-ggplot2.qmd`](lessons/day-08-ggplot2.qmd) |
+| 9 | Intermediate | Control flow | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-09-control-flow.html) | [`day-09-control-flow.qmd`](lessons/day-09-control-flow.qmd) |
+| 10 | Intermediate | Writing your own functions | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-10-functions.html) | [`day-10-functions.qmd`](lessons/day-10-functions.qmd) |
+| 11 | Intermediate | Strings, dates and factors | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-11-strings-dates-factors.html) | [`day-11-strings-dates-factors.qmd`](lessons/day-11-strings-dates-factors.qmd) |
 | 12 | Advanced | Iteration with purrr | Coming soon |  |
 | 13 | Advanced | Regular expressions | Coming soon |  |
 | 14 | Advanced | Statistical modelling | Coming soon |  |
@@ -79,7 +79,7 @@ planning/          tool decision note and syllabus
 You need [R](https://cran.r-project.org) and [Quarto](https://quarto.org/docs/get-started/) 1.4 or later.
 
 ```sh
-Rscript -e 'install.packages(c("knitr", "rmarkdown", "readr", "palmerpenguins"))'
+Rscript -e 'install.packages(c("knitr", "rmarkdown", "tidyverse", "palmerpenguins", "gapminder"))'
 Rscript tests/check-lessons.R
 quarto preview
 ```

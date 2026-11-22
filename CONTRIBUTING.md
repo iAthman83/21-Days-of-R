@@ -28,7 +28,7 @@ Thank you for helping. Corrections, clearer explanations and new exercises are a
 You need [R](https://cran.r-project.org) and [Quarto](https://quarto.org/docs/get-started/).
 
 ```sh
-Rscript -e 'install.packages(c("knitr", "rmarkdown", "readr", "palmerpenguins"))'
+Rscript -e 'install.packages(c("knitr", "rmarkdown", "tidyverse", "palmerpenguins", "gapminder"))'
 Rscript tests/check-lessons.R   # runs every example and checks every solution
 quarto preview                  # opens the site in your browser
 ```
