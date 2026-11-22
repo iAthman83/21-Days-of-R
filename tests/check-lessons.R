@@ -77,10 +77,17 @@ yaml_packages <- function(lines) {
 
 # Evaluate code and return the value of the last top-level expression,
 # which is what Quarto Live passes to a check block as `.result`.
+#
+# Visible values are printed, as they are in the browser. Printing matters:
+# a ggplot only builds (and only fails) when it is printed.
 eval_last <- function(code, envir) {
   exprs <- parse(text = code)
   value <- NULL
-  for (e in exprs) value <- withVisible(eval(e, envir))$value
+  for (e in exprs) {
+    res <- withVisible(eval(e, envir))
+    if (res$visible) utils::capture.output(print(res$value))
+    value <- res$value
+  }
   value
 }
 
@@ -158,6 +165,7 @@ work <- tempfile("lessons-")
 dir.create(work)
 file.copy("data", work, recursive = TRUE)
 old_wd <- setwd(work)
+grDevices::pdf(NULL) # draw plots to a null device
 results <- vapply(files, check_lesson, logical(1))
 setwd(old_wd)
 cat(sprintf("\n%d of %d lessons passed\n", sum(results), length(results)))
