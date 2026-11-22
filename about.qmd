@@ -1,0 +1,28 @@
+---
+metadata-files: [assets/_page-format.yml]
+title: "About"
+---
+
+## About the author
+
+I'm Abubakar Athman, a software engineer and data specialist based in Kampala, Uganda. I have written software since 2020, and R is the tool I use every day. I write R scripts that automate data cleaning and validation, so that work that once took days runs in minutes and gives the same result every time. I build Shiny apps that let colleagues run standard analyses without writing code, and I produce maps, charts and dashboards in R, QGIS and Power BI.
+
+My software engineering background (JavaScript, TypeScript, Python, SQL and Git) shapes how I write R: code that is readable, reproducible and easy for the next person to run. That is the habit this course tries to teach from Day 1.
+
+Much of my R work is with humanitarian data. I have managed data for nationwide needs assessments with thousands of surveys, designed data systems for sampling studies in refugee settlements, and trained field teams in R, KoBoToolbox and ODK. In that work, a wrong number can change where help goes, which is why I care about clean, checked and reproducible analysis.
+
+I wrote this course to help you work with your own data in the same way. I also share programming tutorials on YouTube at [\@programwithabu](https://www.youtube.com/@programwithabu).
+
+- GitHub: [github.com/iAthman83](https://github.com/iAthman83)
+- LinkedIn: [linkedin.com/in/abubakar-athman](https://www.linkedin.com/in/abubakar-athman)
+- YouTube: [youtube.com/@programwithabu](https://www.youtube.com/@programwithabu)
+
+## About the course
+
+21 Days of R is free and open source. The code examples and exercises run in your browser through [webR](https://docs.r-wasm.org/webr/latest/) and [Quarto Live](https://r-wasm.github.io/quarto-live/), so you can start without installing anything.
+
+Found a mistake or have an idea? [Open an issue](https://github.com/iAthman83/21-Days-of-R/issues) or read the [contributing guide](https://github.com/iAthman83/21-Days-of-R/blob/main/CONTRIBUTING.md).
+
+## Licence
+
+The lesson text is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). You may share and adapt it if you credit the author. The code is licensed under the [MIT licence](https://github.com/iAthman83/21-Days-of-R/blob/main/LICENSE).

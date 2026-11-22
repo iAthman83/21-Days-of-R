@@ -1,0 +1,5 @@
+# GitHub language statistics (Linguist)
+# The Quarto Live extension is third-party code: leave it out of the stats.
+_extensions/** linguist-vendored
+# Count the lessons. Quarto (.qmd) files are R Markdown-style documents.
+*.qmd linguist-language=RMarkdown linguist-detectable

@@ -1,0 +1,222 @@
+---
+metadata-files: [assets/_page-format.yml]
+title: "21 Days of R"
+subtitle: "Learn R by doing, from complete beginner to expert"
+toc: false
+page-layout: full
+---
+
+Welcome. This is a free course that teaches R one day at a time. You learn by writing code: every lesson has examples you can edit and graded exercises you can run **in this browser tab**. There is nothing to install for the first day.
+
+**Who it is for:** complete beginners with no programming background, analysts moving from Excel, and students.
+
+## How it works
+
+1. **One lesson a day.** Each lesson takes 1.5 to 3 hours. Go slower if you need to: the 21 days are a guide, not a deadline.
+2. **Run every example.** Click **Run Code** on any code block. Change the code and run it again. You cannot break anything.
+3. **Do the exercises.** Each exercise checks your answer and tells you if it is right. Use **Show Hint** if you are stuck and **Show Solution** to compare your answer.
+4. **Do the "Your turn" challenge.** It has no answer checker. It is where you practise thinking for yourself.
+
+::: {.callout-note}
+## The first time you run code
+The first run on each page takes a few seconds while R loads in your browser. After that, code runs straight away.
+:::
+
+::: {.callout-tip}
+## Being honest about "expert"
+By Day 21 you will be able to write tested, packaged and efficient R code. Real fluency comes from using R on your own problems after the course, and the capstone project is your first step.
+:::
+
+## The 21 days
+
+### Level 1: Beginner
+
+::: {.day-grid}
+::: {.day-card}
+[Day 1]{.day-num}
+
+**[Hello, R](lessons/day-01-hello-r.qmd)**
+
+Run code, use R as a calculator, read errors, get help
+:::
+
+::: {.day-card}
+[Day 2]{.day-num}
+
+**[Objects and data types](lessons/day-02-objects-and-types.qmd)**
+
+Assignment, types, conversion and NA
+:::
+
+::: {.day-card}
+[Day 3]{.day-num}
+
+**[Vectors](lessons/day-03-vectors.qmd)**
+
+Create, index and calculate with vectors
+:::
+
+::: {.day-card}
+[Day 4]{.day-num}
+
+**[Data frames and lists](lessons/day-04-data-frames-and-lists.qmd)**
+
+Inspect, subset and build tables and lists
+:::
+
+::: {.day-card}
+[Day 5]{.day-num}
+
+**[Functions and reading data](lessons/day-05-functions-and-reading-data.qmd)**
+
+Arguments, packages and CSV files
+:::
+
+:::
+
+### Level 2: Intermediate
+
+::: {.day-grid}
+::: {.day-card .soon}
+[Day 6 · coming soon]{.day-num}
+
+**Data wrangling with dplyr**
+
+filter, select, mutate, summarise, group_by
+:::
+
+::: {.day-card .soon}
+[Day 7 · coming soon]{.day-num}
+
+**Tidy data with tidyr**
+
+Reshape, handle missing values, join tables
+:::
+
+::: {.day-card .soon}
+[Day 8 · coming soon]{.day-num}
+
+**Visualisation with ggplot2**
+
+Build charts layer by layer
+:::
+
+::: {.day-card .soon}
+[Day 9 · coming soon]{.day-num}
+
+**Control flow**
+
+if/else, case_when, loops
+:::
+
+::: {.day-card .soon}
+[Day 10 · coming soon]{.day-num}
+
+**Writing your own functions**
+
+Arguments, defaults, checks
+:::
+
+::: {.day-card .soon}
+[Day 11 · coming soon]{.day-num}
+
+**Strings, dates and factors**
+
+stringr, lubridate, forcats
+:::
+
+:::
+
+### Level 3: Advanced
+
+::: {.day-grid}
+::: {.day-card .soon}
+[Day 12 · coming soon]{.day-num}
+
+**Iteration with purrr**
+
+map() and friends
+:::
+
+::: {.day-card .soon}
+[Day 13 · coming soon]{.day-num}
+
+**Regular expressions**
+
+Match, extract and replace patterns
+:::
+
+::: {.day-card .soon}
+[Day 14 · coming soon]{.day-num}
+
+**Statistical modelling**
+
+lm(), glm() and broom
+:::
+
+::: {.day-card .soon}
+[Day 15 · coming soon]{.day-num}
+
+**Reproducible reports with Quarto**
+
+Mix text, code and charts
+:::
+
+::: {.day-card .soon}
+[Day 16 · coming soon]{.day-num}
+
+**Debugging and defensive code**
+
+Tracebacks, tryCatch, browser()
+:::
+
+:::
+
+### Level 4: Expert
+
+::: {.day-grid}
+::: {.day-card .soon}
+[Day 17 · coming soon]{.day-num}
+
+**Environments and scoping**
+
+Closures and function factories
+:::
+
+::: {.day-card .soon}
+[Day 18 · coming soon]{.day-num}
+
+**Object-oriented R**
+
+S3, S4 and R6
+:::
+
+::: {.day-card .soon}
+[Day 19 · coming soon]{.day-num}
+
+**Performance**
+
+bench, vectorisation, data.table
+:::
+
+::: {.day-card .soon}
+[Day 20 · coming soon]{.day-num}
+
+**Writing an R package**
+
+roxygen2, testthat, devtools
+:::
+
+::: {.day-card .soon}
+[Day 21 · coming soon]{.day-num}
+
+**Capstone project**
+
+From raw data to tested code and a report
+:::
+
+:::
+
+## Ready?
+
+Start with [Day 1: Hello, R](lessons/day-01-hello-r.qmd). When you want to work on your own computer, follow the [setup guide](setup.qmd).

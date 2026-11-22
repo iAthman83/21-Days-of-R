@@ -1,0 +1,57 @@
+---
+metadata-files: [assets/_page-format.yml]
+title: "Set up R on your computer"
+subtitle: "Optional for Days 1–14. Needed for Days 15, 20 and 21."
+---
+
+You can do most of this course in your browser. When you are ready to work on your own data, install R and RStudio. It takes about 15 minutes.
+
+## 1. Install R
+
+1. Go to [cran.r-project.org](https://cran.r-project.org).
+2. Choose your operating system (Windows, macOS or Linux) and download the latest release.
+3. Run the installer and accept the default options.
+
+## 2. Install RStudio
+
+RStudio is the program most people use to write R. It is free.
+
+1. Go to [posit.co/download/rstudio-desktop](https://posit.co/download/rstudio-desktop/).
+2. Download RStudio Desktop for your system and install it.
+3. Open **RStudio** (not R). You will see the **Console** on the left. That is where R runs.
+
+## 3. Install the course packages
+
+Copy this line into the RStudio Console and press Enter:
+
+```r
+install.packages(c("tidyverse", "palmerpenguins", "gapminder"))
+```
+
+Later lessons need more packages. Each lesson lists the packages it uses at the top.
+
+## 4. Check that it works
+
+Run this in the Console:
+
+```r
+library(palmerpenguins)
+head(penguins)
+```
+
+If you see a small table of penguin measurements, you are ready.
+
+## 5. Get the course files (optional)
+
+To work through the lesson files on your computer, download the course:
+
+- **Without Git:** on the [GitHub repository](https://github.com/iAthman83/21-Days-of-R), click **Code**, then **Download ZIP**.
+- **With Git:** run `git clone https://github.com/iAthman83/21-Days-of-R.git`
+
+Each lesson is a `.qmd` file in the `lessons/` folder. Open it in RStudio to read and run the code.
+
+## Getting help
+
+- In R, type `?` followed by a function name, for example `?mean`.
+- Search your error message in quotes on the web. Someone has almost always seen it before.
+- Ask on the [Posit Community forum](https://forum.posit.co/).

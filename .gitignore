@@ -1,0 +1,21 @@
+# Quarto
+/.quarto/
+/_site/
+/_freeze/
+*_files/
+*.html
+!_extensions/**/*.html
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# OS
+.DS_Store
+
+**/*.quarto_ipynb
+
+# Claude Code (local only)
+.claude/

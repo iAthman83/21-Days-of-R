@@ -1,0 +1,55 @@
+project:
+  type: website
+  output-dir: _site
+  render:
+    - index.qmd
+    - about.qmd
+    - setup.qmd
+    - lessons/*.qmd
+  resources:
+    - data/
+
+website:
+  title: "21 Days of R"
+  description: "A free, hands-on R course from complete beginner to expert. Run every example and exercise in your browser."
+  site-url: https://iathman83.github.io/21-Days-of-R/
+  repo-url: https://github.com/iAthman83/21-Days-of-R
+  repo-actions: [source, issue]
+  page-navigation: true
+  reader-mode: false
+  search:
+    location: navbar
+    type: overlay
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - href: setup.qmd
+        text: Setup
+      - href: about.qmd
+        text: About
+    right:
+      - icon: github
+        href: https://github.com/iAthman83/21-Days-of-R
+        aria-label: GitHub repository
+  sidebar:
+    style: docked
+    collapse-level: 1
+    contents:
+      - section: "Level 1: Beginner"
+        contents:
+          - lessons/day-01-hello-r.qmd
+          - lessons/day-02-objects-and-types.qmd
+          - lessons/day-03-vectors.qmd
+          - lessons/day-04-data-frames-and-lists.qmd
+          - lessons/day-05-functions-and-reading-data.qmd
+  page-footer:
+    left: "© 2026 Abubakar Athman. Lessons CC BY 4.0, code MIT."
+    right: "Built with [Quarto](https://quarto.org) and [webR](https://docs.r-wasm.org/webr/latest/)."
+
+lang: en-GB
+
+# Formats are set per page, not here. A project-level `format:` with both
+# `html` and `live-html` would render every page twice to the same file.
+#   - Home, setup and about pages: `html`, from assets/_page-format.yml
+#   - Lessons: `live-html` (Quarto Live), from lessons/_metadata.yml
