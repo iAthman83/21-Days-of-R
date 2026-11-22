@@ -1,0 +1,506 @@
+---
+title: "Day 13: Regular expressions"
+subtitle: "Describe text patterns with character classes, quantifiers, anchors and groups, then use them to find, extract and fix messy data"
+webr:
+  packages:
+    - dplyr
+    - stringr
+    - tidyr
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Advanced · **Time:** about 2 hours · **Needs:** [Day 11](day-11-strings-dates-factors.qmd) · **Packages:** stringr, dplyr, tidyr
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Read and write regular expressions with character classes, quantifiers and anchors.
+2. Escape special characters, and know why R needs two backslashes.
+3. Capture parts of a match with groups and pull them out with `str_match()`.
+4. Use regular expressions to validate, extract, replace and split text in a data frame.
+
+```{webr}
+library(dplyr)
+library(stringr)
+library(tidyr)
+```
+
+## What a regular expression is
+
+A **regular expression** (regex) is a short description of a text pattern. On Day 11 you searched for fixed words such as `"Camp"`. A regex can describe "a capital letter followed by digits" or "a word at the end of the line".
+
+`str_view()` shows each match between `<` and `>`. Use it to test a pattern before you rely on it:
+
+```{webr}
+ids <- c("HH001", "hh002", "HH 003", "HH0004", "Household 5", "HH00X")
+str_view(ids, "HH")
+```
+
+Most letters and digits match themselves. A few characters have special meanings. They are what make regex powerful.
+
+## Character classes: which characters
+
+A **character class** matches one character from a set.
+
+| Pattern | Matches one… |
+|---|---|
+| `.` | of any character |
+| `[abc]` | of `a`, `b` or `c` |
+| `[a-z]` | lower-case letter |
+| `[A-Z0-9]` | capital letter or digit |
+| `[^0-9]` | character that is **not** a digit |
+| `\\d` | digit (same as `[0-9]`) |
+| `\\s` | space, tab or line break |
+| `\\w` | letter, digit or underscore |
+| `\\D`, `\\S`, `\\W` | the opposite of the three above |
+
+```{webr}
+str_view(ids, "\\d")      # every digit
+str_view(ids, "[A-Z]")    # every capital letter
+str_view(ids, "\\s")      # the space in "HH 003" and "Household 5"
+```
+
+## Quantifiers: how many
+
+A **quantifier** comes after a character or class and says how many times it may repeat.
+
+| Quantifier | Means |
+|---|---|
+| `?` | 0 or 1 times (optional) |
+| `+` | 1 or more times |
+| `*` | 0 or more times |
+| `{3}` | exactly 3 times |
+| `{2,4}` | 2 to 4 times |
+| `{2,}` | 2 or more times |
+
+```{webr}
+str_extract(ids, "\\d+")      # one or more digits
+str_extract(ids, "\\d{3}")    # exactly three digits
+str_view(c("colour", "color"), "colou?r")   # the u is optional
+```
+
+## Anchors: where
+
+**Anchors** match a position, not a character. `^` means the start of the text and `$` means the end.
+
+```{webr}
+str_detect(ids, "^HH")         # starts with HH
+str_detect(ids, "\\d$")        # ends with a digit
+str_detect(ids, "^HH\\d{3}$")  # the whole value is HH and exactly three digits
+```
+
+The last pattern is a **validation rule**. Without `^` and `$`, `"HH0004"` would pass, because it *contains* `HH000`. Anchor both ends when you check that a whole value has the right format.
+
+`\\b` is a word boundary. It stops `"camp"` from matching inside `"campaign"`:
+
+```{webr}
+notes <- c("near the camp", "campaign office", "Camp B")
+str_detect(notes, "camp")
+str_detect(notes, regex("\\bcamp\\b", ignore_case = TRUE))
+```
+
+`regex(..., ignore_case = TRUE)` makes the match ignore case.
+
+## Escaping: matching special characters
+
+To match a character that has a special meaning, such as `.`, `+`, `(` or `$`, put a backslash in front of it. In an R string, a backslash itself must be written twice. So the regex `\.` ("a real full stop") is typed `"\\."` in R:
+
+```{webr}
+amounts <- c("1.5", "15", "2.75")
+str_detect(amounts, ".")     # . means any character, so every value matches
+str_detect(amounts, "\\.")   # a real full stop
+str_replace_all("Price: $25 (approx.)", "[$()]", "")   # inside [ ], most special characters are literal
+```
+
+::: {.callout-note}
+## Why two backslashes?
+R reads the string first and treats `\` as the start of an escape, as in `"\n"` for a new line. `"\\d"` becomes the two characters `\d`, which the regex engine then reads as "a digit". If a pattern with backslashes looks hard to read, test it with `str_view()`.
+:::
+
+## Alternation and groups
+
+`|` means "or". Brackets `( )` make a **group**, which keeps the alternatives together:
+
+```{webr}
+str_detect(c("Gulu", "Arua", "Mbale"), "^(Gulu|Arua)$")
+str_view("grey and gray", "gr(e|a)y")
+```
+
+Groups also **capture** what they match. `str_match()` returns the whole match in the first column and each group in the next columns:
+
+```{webr}
+phones <- c("+256 772 123456", "0772-123456", "256701987654", "call 0414 345678")
+str_match(phones, "(\\d{3})[ -]?(\\d{6})$")
+```
+
+You can reuse a captured group in a replacement with `\\1`, `\\2` and so on. This reorders day-first dates to year-month-day:
+
+```{webr}
+str_replace("15/03/2026", "(\\d{2})/(\\d{2})/(\\d{4})", "\\3-\\2-\\1")
+```
+
+## Regex in a data frame
+
+These are the stringr functions you will use most. Each takes the text first and the pattern second.
+
+| Function | Does |
+|---|---|
+| `str_detect()` | `TRUE` or `FALSE` for each value |
+| `str_count()` | how many matches in each value |
+| `str_extract()` | the first match |
+| `str_extract_all()` | every match, as a list |
+| `str_match()` | the match and its groups, as a matrix |
+| `str_replace()` / `str_replace_all()` | replace the first or every match |
+| `str_remove_all()` | delete every match |
+| `str_split()` | split at each match |
+
+Here is a messy free-text column from a field form:
+
+```{webr}
+forms <- data.frame(
+  id    = c("hh-1", "HH 02", "HH003", "hh_4"),
+  notes = c("Paid UGX 25,000 on 03/03/2026", "No payment", "Paid ugx 7,500 on 11/03/2026", "Paid UGX 120,000 on 20/03/2026; follow up")
+)
+
+clean <- forms |>
+  mutate(
+    number = str_extract(id, "\\d+"),
+    id     = str_c("HH", str_pad(number, width = 3, pad = "0")),
+    paid   = str_detect(notes, regex("^paid", ignore_case = TRUE)),
+    amount = notes |> str_extract("[\\d,]+(?= on)") |> str_remove_all(",") |> as.numeric(),
+    date   = str_extract(notes, "\\d{2}/\\d{2}/\\d{4}")
+  ) |>
+  select(-number)
+clean
+```
+
+`(?= on)` is a **lookahead**: it says "followed by ` on`" without including ` on` in the match. You will not need lookarounds often, but they are handy when the text around a value is the only thing that identifies it.
+
+tidyr has regex helpers too. `separate_wider_regex()` splits one column into several using named patterns:
+
+```{webr}
+codes <- data.frame(code = c("GUL-2026-014", "ARU-2025-003"))
+codes |>
+  separate_wider_regex(code, patterns = c(district = "[A-Z]{3}", "-", year = "\\d{4}", "-", number = "\\d+"))
+```
+
+Unnamed pieces, such as `"-"`, are matched and dropped.
+
+::: {.callout-tip}
+## Build patterns step by step
+Start with a small piece, check it with `str_view()`, then add the next piece. A long regex written in one go is almost always wrong somewhere.
+:::
+
+::: {.callout-tip}
+## Excel bridge
+Excel's Find and Replace supports only `*` and `?` as wildcards. Newer versions of Excel have `REGEXTEST()`, `REGEXEXTRACT()` and `REGEXREPLACE()`, which match `str_detect()`, `str_extract()` and `str_replace()`.
+:::
+
+## Exercises
+
+### Exercise 1: Validate an ID format
+
+A valid household ID is `HH` followed by **exactly three digits** and nothing else. Use `str_detect()` with a regular expression to mark each ID as valid or not. Save the result as `valid`.
+
+```{webr}
+#| exercise: ex13_validate
+#| setup: true
+library(stringr)
+ids <- c("HH001", "hh002", "HH 003", "HH0004", "HH12", "HH999")
+```
+
+```{webr}
+#| exercise: ex13_validate
+valid <- str_detect(ids, "______")
+valid
+```
+
+::: {.hint exercise="ex13_validate"}
+::: {.callout-note collapse="false"}
+## Hint
+Anchor both ends: `^` at the start and `$` at the end. Three digits is `\\d{3}`.
+:::
+:::
+
+::: {.solution exercise="ex13_validate"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+valid <- str_detect(ids, "^HH\\d{3}$")
+valid
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex13_validate
+#| check: true
+expected <- c(TRUE, FALSE, FALSE, FALSE, FALSE, TRUE)
+if (!exists("valid") || !is.logical(valid)) {
+  list(correct = FALSE, message = "valid should be TRUE or FALSE for each ID. Use str_detect().")
+} else if (identical(valid, expected)) {
+  list(correct = TRUE, message = "Correct. Only HH001 and HH999 have the right format.")
+} else if (isTRUE(valid[4])) {
+  list(correct = FALSE, message = "HH0004 should be invalid. Add ^ and $ so the whole value must match.")
+} else if (isTRUE(valid[2])) {
+  list(correct = FALSE, message = "hh002 should be invalid: the pattern is case-sensitive, so use capital HH.")
+} else {
+  list(correct = FALSE, message = "Try ^HH\\\\d{3}$: HH, then exactly three digits, then the end.")
+}
+```
+
+### Exercise 2: Extract numbers
+
+Each note contains one amount, written with commas, such as `"25,000"`. Extract the amount, remove the commas and convert it to a number. Save the result as `amounts`.
+
+```{webr}
+#| exercise: ex13_extract
+#| setup: true
+library(stringr)
+notes <- c("Paid UGX 25,000 in cash", "Transfer of 7,500", "UGX 120,000 by mobile money")
+```
+
+```{webr}
+#| exercise: ex13_extract
+amounts <- notes |>
+  str_extract("______") |>
+  str_remove_all(",") |>
+  as.numeric()
+amounts
+```
+
+::: {.hint exercise="ex13_extract"}
+::: {.callout-note collapse="false"}
+## Hint
+The amount is one or more characters that are each a digit or a comma: `[\\d,]+`.
+:::
+:::
+
+::: {.solution exercise="ex13_extract"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+amounts <- notes |>
+  str_extract("[\\d,]+") |>
+  str_remove_all(",") |>
+  as.numeric()
+amounts
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex13_extract
+#| check: true
+if (!exists("amounts") || !is.numeric(amounts)) {
+  list(correct = FALSE, message = "amounts should be numeric. Finish with as.numeric().")
+} else if (identical(amounts, c(25000, 7500, 120000))) {
+  list(correct = TRUE, message = "Correct.")
+} else if (identical(amounts, c(25, 7, 120))) {
+  list(correct = FALSE, message = "The pattern stops at the comma. Allow commas too: [\\\\d,]+")
+} else {
+  list(correct = FALSE, message = "Expected 25000, 7500 and 120000. Check the pattern with str_view().")
+}
+```
+
+### Exercise 3: Clean phone numbers
+
+Phone numbers were typed in many ways. Remove **every character that is not a digit**, then keep only the **last nine digits**. Save the result as `phones_clean`.
+
+```{webr}
+#| exercise: ex13_phones
+#| setup: true
+library(stringr)
+phones <- c("+256 772 123456", "0772-123456", "(0)701 987 654", "256-414-345678")
+```
+
+```{webr}
+#| exercise: ex13_phones
+phones_clean <- phones |>
+  str_remove_all("______") |>
+  str_extract("______")
+phones_clean
+```
+
+::: {.hint exercise="ex13_phones"}
+::: {.callout-note collapse="false"}
+## Hint
+"Not a digit" is `[^0-9]` or `\\D`. "The last nine digits" is `\\d{9}$`.
+:::
+:::
+
+::: {.solution exercise="ex13_phones"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+phones_clean <- phones |>
+  str_remove_all("\\D") |>
+  str_extract("\\d{9}$")
+phones_clean
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex13_phones
+#| check: true
+expected <- c("772123456", "772123456", "701987654", "414345678")
+if (!exists("phones_clean")) {
+  list(correct = FALSE, message = "Save the result as phones_clean.")
+} else if (identical(phones_clean, expected)) {
+  list(correct = TRUE, message = "Correct. Four spellings, one format.")
+} else if (any(str_detect(phones_clean, "\\D"), na.rm = TRUE)) {
+  list(correct = FALSE, message = "Some values still contain spaces or symbols. Remove everything that is not a digit with \\\\D.")
+} else {
+  list(correct = FALSE, message = "Keep only the last nine digits with \\\\d{9}$.")
+}
+```
+
+### Exercise 4: Reorder with groups
+
+Turn day-first dates such as `"15/03/2026"` into year-month-day text such as `"2026-03-15"`, using `str_replace()` with three capture groups and `\\1`, `\\2` and `\\3` in the replacement. Save the result as `iso`.
+
+```{webr}
+#| exercise: ex13_groups
+#| setup: true
+library(stringr)
+dates <- c("15/03/2026", "02/04/2026", "28/02/2025")
+```
+
+```{webr}
+#| exercise: ex13_groups
+iso <- str_replace(dates, "(\\d{2})/(\\d{2})/(\\d{4})", "______")
+iso
+```
+
+::: {.hint exercise="ex13_groups"}
+::: {.callout-note collapse="false"}
+## Hint
+Group 1 is the day, group 2 the month and group 3 the year. The replacement is `"\\3-\\2-\\1"`.
+:::
+:::
+
+::: {.solution exercise="ex13_groups"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+iso <- str_replace(dates, "(\\d{2})/(\\d{2})/(\\d{4})", "\\3-\\2-\\1")
+iso
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex13_groups
+#| check: true
+if (!exists("iso")) {
+  list(correct = FALSE, message = "Save the result as iso.")
+} else if (identical(iso, c("2026-03-15", "2026-04-02", "2025-02-28"))) {
+  list(correct = TRUE, message = "Correct. as.Date(iso) would now work directly.")
+} else if (identical(iso, c("2026-15-03", "2026-02-04", "2025-28-02"))) {
+  list(correct = FALSE, message = "Day and month are swapped. The order is year, month, day: \\\\3-\\\\2-\\\\1.")
+} else {
+  list(correct = FALSE, message = "Use \\\\3 for the year, \\\\2 for the month and \\\\1 for the day, separated by dashes.")
+}
+```
+
+### Exercise 5: Extract parts in a data frame
+
+The `code` column has the form `district-year-number`, such as `"GUL-2026-014"`. Add a column `district` with the three capital letters and a column `year` with the four-digit year **as a number**. Save the result as `sites2`.
+
+```{webr}
+#| exercise: ex13_df
+#| setup: true
+library(dplyr)
+library(stringr)
+sites <- data.frame(code = c("GUL-2026-014", "ARU-2025-003", "MBA-2026-101"))
+```
+
+```{webr}
+#| exercise: ex13_df
+sites2 <- sites |>
+  mutate(
+    district = str_extract(code, "______"),
+    year     = as.numeric(str_extract(code, "______"))
+  )
+sites2
+```
+
+::: {.hint exercise="ex13_df"}
+::: {.callout-note collapse="false"}
+## Hint
+The district is three capital letters at the start: `^[A-Z]{3}`. The year is exactly four digits: `\\d{4}`.
+:::
+:::
+
+::: {.solution exercise="ex13_df"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+sites2 <- sites |>
+  mutate(
+    district = str_extract(code, "^[A-Z]{3}"),
+    year     = as.numeric(str_extract(code, "\\d{4}"))
+  )
+sites2
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex13_df
+#| check: true
+if (!exists("sites2") || !all(c("district", "year") %in% names(sites2))) {
+  list(correct = FALSE, message = "sites2 needs the columns district and year.")
+} else if (!identical(sites2$district, c("GUL", "ARU", "MBA"))) {
+  list(correct = FALSE, message = "district should be GUL, ARU and MBA. Use ^[A-Z]{3}.")
+} else if (!is.numeric(sites2$year)) {
+  list(correct = FALSE, message = "year should be a number. Wrap str_extract() in as.numeric().")
+} else if (identical(sites2$year, c(2026, 2025, 2026))) {
+  list(correct = TRUE, message = "Correct.")
+} else {
+  list(correct = FALSE, message = "year should be 2026, 2025 and 2026. Use \\\\d{4} for exactly four digits.")
+}
+```
+
+## Your turn
+
+1. Write a pattern that matches valid Ugandan mobile numbers written as `07` followed by eight digits, such as `"0772123456"`. Test it on correct and incorrect examples with `str_view()`.
+2. Count how many words each note has with `str_count(notes, "\\w+")`. Then count the sentences, assuming each ends with `.`, `!` or `?`.
+3. Use `separate_wider_regex()` to split values such as `"Gulu (Northern)"` into a `district` and a `region` column. (Hint: the brackets must be escaped, `\\(` and `\\)`.)
+
+```{webr}
+library(dplyr)
+library(stringr)
+library(tidyr)
+# Your code here
+
+```
+
+## Common mistakes
+
+- **One backslash.** `"\d"` is an error in R. Write `"\\d"`.
+- **Forgetting anchors in validation.** `str_detect(x, "\\d{3}")` is `TRUE` for `"12345"`. Use `^\\d{3}$` to check the whole value.
+- **Using `.` to mean a full stop.** `.` matches any character. Escape it: `"\\."`.
+- **Greedy matches.** `.*` takes as much as it can. `str_extract("<a><b>", "<.*>")` returns `"<a><b>"`, not `"<a>"`. Add `?` to make it take as little as possible: `"<.*?>"`.
+- **Case.** Patterns are case-sensitive. Use `regex(pattern, ignore_case = TRUE)` or clean the case first.
+
+## Summary
+
+- A regex describes a pattern. Test it with `str_view()`.
+- Character classes (`[a-z]`, `\\d`, `\\s`, `\\w`) say which characters, quantifiers (`?`, `+`, `*`, `{n}`) say how many, and anchors (`^`, `$`, `\\b`) say where.
+- Escape special characters with `\\`. In R, every regex backslash is written twice.
+- `|` means "or". Groups `( )` capture parts of a match for `str_match()` and for `\\1` in replacements.
+- Use regex with `str_detect()`, `str_extract()`, `str_replace_all()`, `str_remove_all()` and tidyr's `separate_wider_regex()`.
+
+**Next:** on Day 14 you will fit statistical models with `lm()` and `glm()`.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 15: Regular expressions](https://r4ds.hadley.nz/regexps).
+- [stringr vignette: Regular expressions](https://stringr.tidyverse.org/articles/regular-expressions.html).
+- [regex101.com](https://regex101.com) lets you test a pattern and explains each part. Choose the PCRE flavour, and remember to use single backslashes there.

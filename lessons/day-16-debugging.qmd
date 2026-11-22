@@ -1,0 +1,651 @@
+---
+title: "Day 16: Debugging and defensive code"
+subtitle: "Read error messages and tracebacks, signal and handle conditions, step through code, and write functions that fail loudly and early"
+webr:
+  packages:
+    - dplyr
+    - purrr
+  resources:
+    - ../data/household-survey.csv
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Advanced · **Time:** about 2 hours · **Needs:** [Day 10](day-10-functions.qmd) · **Packages:** purrr, dplyr · **Data:** `data/household-survey.csv`
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Read an error message and a traceback to find where a problem starts.
+2. Follow a step-by-step method to find and fix a bug.
+3. Use `message()`, `warning()` and `stop()` for the right kind of problem.
+4. Handle errors with `tryCatch()` and purrr's `possibly()`.
+5. Step through a function with `browser()` and `debugonce()` on your own computer.
+6. Write defensive functions that check their inputs and fail early with clear messages.
+
+```{webr}
+library(dplyr)
+library(purrr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+## Read the error message first
+
+Errors look alarming, but most of them tell you exactly what is wrong. Read the whole message slowly.
+
+```{webr}
+hh |> filter(distrct == "Gulu") # Error expected: a typo in a column name
+```
+
+The message names the function (`filter()`), the problem (object `distrct` not found) and often a hint. Most errors you will meet are one of these:
+
+| Message contains | Usually means |
+|---|---|
+| `object 'x' not found` | a typo, or you have not run the line that creates `x` |
+| `could not find function "x"` | a typo, or the package is not loaded with `library()` |
+| `non-numeric argument to binary operator` | maths on text, often a number read as text |
+| `unexpected symbol` / `unexpected ')'` | a missing comma, bracket or quote |
+| `argument "x" is missing, with no default` | a function was called without a required argument |
+| `subscript out of bounds` | asking for an element that does not exist, such as `x[[10]]` of a list of 3 |
+
+If the message makes no sense, copy it into a search engine, without your own object names. Someone has almost always seen it before.
+
+## Tracebacks: where did it go wrong?
+
+When the error happens deep inside functions that call other functions, the message alone may not tell you where to look. A **traceback** lists the calls that were running when the error happened.
+
+```{webr}
+per_person <- function(income, size) income / size
+household_report <- function(df) {
+  df |> mutate(income_pp = per_person(monthly_income_ugx, household_size))
+}
+broken <- hh |> mutate(household_size = as.character(household_size))
+household_report(broken) # Error expected: household_size is now text
+```
+
+::: {.callout-important}
+## Run this on your own computer
+In RStudio, click **Show Traceback** next to the error, or run `traceback()` straight after it. You will see something like this (read it **from the bottom up**: the bottom is where you started, and the top is where it failed):
+
+```
+5: per_person(monthly_income_ugx, household_size)
+4: mutate(...)
+3: df |> mutate(income_pp = per_person(...))
+2: household_report(broken)
+1: (top level)
+```
+
+tidyverse functions often print a shorter version as part of the error, starting `Caused by error in ...`.
+:::
+
+The traceback says the error is in `per_person()`, but the cause is earlier: `household_size` became text. **Where an error appears is not always where the bug is.** Work backwards to find the first place where the data stopped looking the way you expect.
+
+## A method for finding bugs
+
+1. **Make it happen again.** A bug you cannot repeat is a bug you cannot fix.
+2. **Make it small.** Remove everything that is not needed to cause the error: fewer rows, fewer steps, simpler values. Often the bug becomes obvious on the way.
+3. **Check your assumptions.** Look at the data just before the error with `str()`, `head()`, `class()` and `summary()`.
+4. **Change one thing at a time**, and run again.
+5. **Explain it to someone**, or to a rubber duck. Saying each step out loud often shows you the mistaken one.
+
+```{webr}
+str(broken$household_size)   # chr: it is text, not a number
+```
+
+When you ask for help online, share a **reprex**, a minimal reproducible example: the smallest code, with small built-in or made-up data, that shows the problem. The reprex package (`reprex::reprex()`) formats one for you on your own computer.
+
+## Three kinds of condition
+
+R signals three kinds of **condition**. Use the one that matches how serious the problem is.
+
+| Function | Use when | What happens |
+|---|---|---|
+| `message()` | you want to tell the user what the code is doing | text is shown, code continues |
+| `warning()` | something is suspicious, but there is still a result | the result is returned, and a warning is shown |
+| `stop()` | the code cannot continue correctly | the code stops with an error |
+
+```{webr}
+clean_income <- function(x) {
+  message("Cleaning ", length(x), " values")
+  if (any(x < 0, na.rm = TRUE)) {
+    warning(sum(x < 0, na.rm = TRUE), " negative income(s) set to NA")
+    x[x < 0] <- NA
+  }
+  x
+}
+
+clean_income(c(120000, -5, 300000))
+```
+
+```{webr}
+per_person_safe <- function(income, size) {
+  if (!is.numeric(size)) {
+    stop("`size` must be numeric, not ", class(size)[1], ".", call. = FALSE)
+  }
+  income / size
+}
+per_person_safe(500000, "4") # Error expected: the function stops with a clear message
+```
+
+`call. = FALSE` leaves out the function call from the message, which is often easier to read.
+
+::: {.callout-warning}
+## Do not ignore warnings
+A warning means R did something, but maybe not what you wanted. `as.numeric("12a")` gives `NA` with a warning. If you ignore it, the `NA` travels quietly into your averages. Read every warning, then fix the cause or deal with it deliberately.
+:::
+
+`suppressMessages()` and `suppressWarnings()` hide conditions you have checked and decided are harmless:
+
+```{webr}
+suppressWarnings(as.numeric(c("10", "n/a", "30")))
+```
+
+## Handling errors: `tryCatch()`
+
+Sometimes an error is expected and you want to carry on: one file in a folder is broken, one web request fails, one value cannot be parsed. `tryCatch()` runs code and decides what to do if a condition happens:
+
+```{webr}
+result <- tryCatch(
+  log("ten"),
+  error = function(e) {
+    message("Could not take the log: ", conditionMessage(e))
+    NA
+  }
+)
+result
+```
+
+- The first argument is the code to try.
+- `error = function(e) ...` runs if there is an error. `e` is the condition, and `conditionMessage(e)` is its message. The value of this function becomes the result.
+- You can also catch `warning = function(w) ...`, and add `finally = ...` for code that must run either way, such as closing a connection.
+
+```{webr}
+to_number <- function(x) {
+  tryCatch(
+    as.numeric(x),
+    warning = function(w) {
+      message("'", x, "' is not a number")
+      NA_real_
+    }
+  )
+}
+to_number("42")
+to_number("forty-two")
+```
+
+### `possibly()` and `safely()` for loops
+
+When you `map()` over many inputs (Day 12), one error stops the whole loop. purrr wraps a function so that it never fails:
+
+- `possibly(f, otherwise = NA)` returns `otherwise` when `f` fails.
+- `safely(f)` returns a list with `result` and `error`, so you can see which inputs failed and why.
+
+```{webr}
+values <- list(100, 4, "a", 25)
+map(values, log) # Error expected: one bad value stops everything
+```
+
+```{webr}
+map_dbl(values, possibly(log, otherwise = NA_real_))
+
+checked <- map(values, safely(log))
+map_lgl(checked, \(r) is.null(r$error))   # TRUE where it worked
+```
+
+::: {.callout-note}
+## Catch only what you expect
+Wrapping everything in `tryCatch()` hides real bugs. Catch an error only when you know why it can happen and what the right fallback is. Let unexpected errors stop the code.
+:::
+
+## Interactive debugging
+
+To see inside a function while it runs, stop it part-way and look around.
+
+::: {.callout-important}
+## Run this on your own computer
+Interactive debugging needs RStudio or the R Console. It does not work in the browser.
+
+- Put `browser()` on a line inside a function. When R reaches that line, it pauses. You can then type the names of objects to see their values.
+- `debugonce(fun)` pauses at the start of `fun` the next time it is called, without editing the code.
+- In RStudio, click to the left of a line number in a script to set a **breakpoint**, a red dot that works like `browser()`.
+- `options(error = recover)` pauses at the moment of any error and lets you pick which call in the traceback to look inside.
+
+While paused, type one of these at the `Browse[1]>` prompt:
+
+| Type | To |
+|---|---|
+| `n` | run the next line |
+| `s` | step into the function on the next line |
+| `c` | continue to the end, or the next pause |
+| `f` | finish the current loop or function |
+| `Q` | quit the debugger |
+
+```r
+per_person <- function(income, size) {
+  browser()            # pauses here: type income, size or class(size)
+  income / size
+}
+per_person(500000, "4")
+```
+
+Remember to delete `browser()` lines when you have finished.
+:::
+
+The quick alternative, which works everywhere, is to print what you need: `print(class(size))` or `str(df)` inside the function. Remove those lines afterwards too.
+
+## Defensive code: fail loudly and early
+
+A function that gets bad input has two choices: stop with a clear message now, or return a wrong answer that someone finds weeks later. Always prefer the first.
+
+### Check inputs at the start
+
+`stopifnot()` checks one or more conditions. Since R 4.0, you can name each condition with the message to show:
+
+```{webr}
+mean_income <- function(df) {
+  stopifnot(
+    "`df` must be a data frame" = is.data.frame(df),
+    "`df` needs a monthly_income_ugx column" = "monthly_income_ugx" %in% names(df),
+    "`df` has no rows" = nrow(df) > 0
+  )
+  mean(df$monthly_income_ugx, na.rm = TRUE)
+}
+
+mean_income(hh)
+mean_income(select(hh, district)) # Error expected: the column is missing
+```
+
+### Limit choices with `match.arg()`
+
+When an argument has a fixed set of options, list them as the default and check with `match.arg()`. It also accepts unique abbreviations and gives a helpful error for anything else:
+
+```{webr}
+summarise_income <- function(x, stat = c("mean", "median")) {
+  stat <- match.arg(stat)
+  switch(stat,
+    mean   = mean(x, na.rm = TRUE),
+    median = median(x, na.rm = TRUE)
+  )
+}
+summarise_income(hh$monthly_income_ugx)            # the first choice, "mean", is the default
+summarise_income(hh$monthly_income_ugx, "median")
+summarise_income(hh$monthly_income_ugx, "max") # Error expected: "max" is not one of the choices
+```
+
+### Check your data, not just your code
+
+Many bugs are in the data. Check the facts your analysis depends on before you rely on them:
+
+```{webr}
+stopifnot(
+  "household IDs must be unique" = !anyDuplicated(hh$household_id),
+  "household size must be at least 1" = all(hh$household_size >= 1),
+  "has_water must be yes or no" = all(hh$has_water %in% c("yes", "no"))
+)
+"all checks passed"
+```
+
+Put checks like these straight after you read or join data. A join that duplicates rows, or a new data file with a renamed column, then stops the analysis at once, with a message that says why.
+
+### Other defensive habits
+
+- **Use typed functions.** `map_dbl()` and `vapply()` fail if a result has the wrong type. `sapply()` silently returns a list instead.
+- **Write `TRUE` and `FALSE` in full.** `T` and `F` are ordinary objects that can be overwritten: `T <- 0` is allowed.
+- **Use `seq_along(x)`, not `1:length(x)`.** When `x` is empty, `1:length(x)` is `c(1, 0)`, so the loop runs twice.
+- **Use `[[` to take one element of a list.** It fails if the element is missing, while `$` partially matches names and can return the wrong one.
+
+```{webr}
+x <- c()
+1:length(x)      # 1 0: the loop would run twice on nothing
+seq_along(x)     # integer(0): the loop does not run
+```
+
+::: {.callout-tip}
+## Excel bridge
+Excel's `IFERROR()` is like `tryCatch()` or `possibly()`, and Data Validation is like `stopifnot()` checks on your data. In R the checks are written in code, so they run every time, on every new file.
+:::
+
+## Exercises
+
+### Exercise 1: Catch an error
+
+Write `safe_log()` so that it returns `log(x)` when that works, and `NA` when `log(x)` gives an error. Use `tryCatch()`.
+
+```{webr}
+#| exercise: ex16_trycatch
+safe_log <- function(x) {
+  tryCatch(
+    log(x),
+    error = ______
+  )
+}
+safe_log(100)
+safe_log("a")
+```
+
+::: {.hint exercise="ex16_trycatch"}
+::: {.callout-note collapse="false"}
+## Hint
+The error handler is a function that takes the condition and returns the fallback value: `function(e) NA`.
+:::
+:::
+
+::: {.solution exercise="ex16_trycatch"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+safe_log <- function(x) {
+  tryCatch(
+    log(x),
+    error = function(e) NA
+  )
+}
+safe_log(100)
+safe_log("a")
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex16_trycatch
+#| check: true
+bad <- tryCatch(safe_log("a"), error = function(e) "error")
+if (!exists("safe_log") || !is.function(safe_log)) {
+  list(correct = FALSE, message = "Create a function called safe_log.")
+} else if (identical(bad, "error")) {
+  list(correct = FALSE, message = "safe_log(\"a\") still stops with an error. Add error = function(e) NA.")
+} else if (!isTRUE(is.na(bad))) {
+  list(correct = FALSE, message = "safe_log(\"a\") should return NA.")
+} else if (!isTRUE(all.equal(safe_log(100), log(100)))) {
+  list(correct = FALSE, message = "safe_log(100) should still return log(100).")
+} else {
+  list(correct = TRUE, message = "Correct. Good input gives a result, and bad input gives NA instead of stopping.")
+}
+```
+
+### Exercise 2: Signal a warning
+
+Write `check_size()` so that it **warns** with a message when `n` is greater than 20 (a suspiciously large household) and always returns `n`.
+
+```{webr}
+#| exercise: ex16_warning
+check_size <- function(n) {
+  if (______) {
+    ______("Household size ", n, " is unusually large. Check the data.")
+  }
+  n
+}
+check_size(6)
+check_size(45)
+```
+
+::: {.hint exercise="ex16_warning"}
+::: {.callout-note collapse="false"}
+## Hint
+The condition is `n > 20`, and the function that signals a warning is `warning()`.
+:::
+:::
+
+::: {.solution exercise="ex16_warning"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+check_size <- function(n) {
+  if (n > 20) {
+    warning("Household size ", n, " is unusually large. Check the data.")
+  }
+  n
+}
+check_size(6)
+check_size(45)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex16_warning
+#| check: true
+signal <- function(code) {
+  tryCatch({ force(code); "none" },
+    warning = function(w) "warning",
+    error = function(e) "error",
+    message = function(m) "message")
+}
+if (!exists("check_size") || !is.function(check_size)) {
+  list(correct = FALSE, message = "Create a function called check_size.")
+} else if (signal(check_size(45)) == "error") {
+  list(correct = FALSE, message = "check_size(45) stops with an error. Use warning(), not stop(): the value should still be returned.")
+} else if (signal(check_size(45)) == "message") {
+  list(correct = FALSE, message = "check_size(45) sends a message. Use warning() for something suspicious.")
+} else if (signal(check_size(45)) != "warning") {
+  list(correct = FALSE, message = "check_size(45) should give a warning. Check the condition: n > 20.")
+} else if (signal(check_size(6)) != "none") {
+  list(correct = FALSE, message = "check_size(6) should not warn. Only sizes above 20 are suspicious.")
+} else if (!identical(suppressWarnings(check_size(45)), 45)) {
+  list(correct = FALSE, message = "check_size() should still return n after the warning.")
+} else {
+  list(correct = TRUE, message = "Correct. The warning flags the problem, and the value is still returned.")
+}
+```
+
+### Exercise 3: Validate inputs with `stopifnot()`
+
+Add two named checks to `top_district()`: `df` must be a data frame, and it must have a `district` column. Use the messages `"df must be a data frame"` and `"df needs a district column"`.
+
+```{webr}
+#| exercise: ex16_stopifnot
+#| setup: true
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex16_stopifnot
+top_district <- function(df) {
+  stopifnot(
+    "df must be a data frame" = ______,
+    "df needs a district column" = ______
+  )
+  names(which.max(table(df$district)))
+}
+top_district(hh)
+```
+
+::: {.hint exercise="ex16_stopifnot"}
+::: {.callout-note collapse="false"}
+## Hint
+Use `is.data.frame(df)` for the first check and `"district" %in% names(df)` for the second.
+:::
+:::
+
+::: {.solution exercise="ex16_stopifnot"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+top_district <- function(df) {
+  stopifnot(
+    "df must be a data frame" = is.data.frame(df),
+    "df needs a district column" = "district" %in% names(df)
+  )
+  names(which.max(table(df$district)))
+}
+top_district(hh)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex16_stopifnot
+#| check: true
+msg <- function(code) tryCatch({ force(code); NA_character_ }, error = function(e) conditionMessage(e))
+if (!exists("top_district") || !is.function(top_district)) {
+  list(correct = FALSE, message = "Create a function called top_district.")
+} else if (!is.na(msg(top_district(hh)))) {
+  list(correct = FALSE, message = paste("top_district(hh) should work, but gave an error:", msg(top_district(hh))))
+} else if (!identical(msg(top_district(list(district = "Gulu"))), "df must be a data frame")) {
+  list(correct = FALSE, message = "A list is not a data frame. The first check should be is.data.frame(df).")
+} else if (!identical(msg(top_district(data.frame(region = "Northern"))), "df needs a district column")) {
+  list(correct = FALSE, message = "A data frame without a district column should fail with \"df needs a district column\".")
+} else {
+  list(correct = TRUE, message = paste0("Correct. Bad input now stops at once with a clear message. The top district is ", top_district(hh), "."))
+}
+```
+
+### Exercise 4: Limit the choices with `match.arg()`
+
+Complete `round_income()` so that `method` can only be `"nearest"`, `"down"` or `"up"`, with `"nearest"` as the default. Use `match.arg()`.
+
+```{webr}
+#| exercise: ex16_matcharg
+round_income <- function(x, method = c("nearest", "down", "up")) {
+  method <- ______
+  switch(method,
+    nearest = round(x, -3),
+    down    = floor(x / 1000) * 1000,
+    up      = ceiling(x / 1000) * 1000
+  )
+}
+round_income(391486)
+round_income(391486, "up")
+```
+
+::: {.hint exercise="ex16_matcharg"}
+::: {.callout-note collapse="false"}
+## Hint
+`match.arg(method)` checks the value against the choices in the default, and uses the first one if none is given.
+:::
+:::
+
+::: {.solution exercise="ex16_matcharg"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+round_income <- function(x, method = c("nearest", "down", "up")) {
+  method <- match.arg(method)
+  switch(method,
+    nearest = round(x, -3),
+    down    = floor(x / 1000) * 1000,
+    up      = ceiling(x / 1000) * 1000
+  )
+}
+round_income(391486)
+round_income(391486, "up")
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex16_matcharg
+#| check: true
+fails_bad <- tryCatch({ round_income(391486, "sideways"); FALSE }, error = function(e) TRUE)
+default <- tryCatch(round_income(391486), error = function(e) NULL)
+if (!exists("round_income") || !is.function(round_income)) {
+  list(correct = FALSE, message = "Create a function called round_income.")
+} else if (is.null(default) || length(default) != 1) {
+  list(correct = FALSE, message = "round_income(391486) should use \"nearest\" by default. Use method <- match.arg(method).")
+} else if (!identical(default, 391000)) {
+  list(correct = FALSE, message = "round_income(391486) should give 391000.")
+} else if (!identical(round_income(391486, "up"), 392000)) {
+  list(correct = FALSE, message = "round_income(391486, \"up\") should give 392000.")
+} else if (!fails_bad) {
+  list(correct = FALSE, message = "An unknown method such as \"sideways\" should stop with an error.")
+} else {
+  list(correct = TRUE, message = "Correct. Unknown methods now fail with a message that lists the valid choices.")
+}
+```
+
+### Exercise 5: Keep a loop going with `possibly()`
+
+`parse_amount()` stops with an error on text it cannot read. Use `map_dbl()` and `possibly()` to parse every value, giving `NA` where parsing fails. Save the result as `amounts`.
+
+```{webr}
+#| exercise: ex16_possibly
+#| setup: true
+library(purrr)
+parse_amount <- function(x) {
+  if (!grepl("^[0-9,]+$", x)) stop("Cannot read amount: ", x)
+  as.numeric(gsub(",", "", x))
+}
+raw <- c("25,000", "7500", "about 10k", "120,000", "")
+```
+
+```{webr}
+#| exercise: ex16_possibly
+amounts <- map_dbl(raw, possibly(______, otherwise = ______))
+amounts
+```
+
+::: {.hint exercise="ex16_possibly"}
+::: {.callout-note collapse="false"}
+## Hint
+The first blank is the function, `parse_amount`, without brackets. Because `map_dbl()` needs numbers, use `otherwise = NA_real_`.
+:::
+:::
+
+::: {.solution exercise="ex16_possibly"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+amounts <- map_dbl(raw, possibly(parse_amount, otherwise = NA_real_))
+amounts
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex16_possibly
+#| check: true
+if (!exists("amounts") || !is.numeric(amounts)) {
+  list(correct = FALSE, message = "amounts should be a numeric vector from map_dbl().")
+} else if (identical(amounts, c(25000, 7500, NA, 120000, NA))) {
+  list(correct = TRUE, message = "Correct. Two values could not be read and became NA. The loop still finished.")
+} else {
+  list(correct = FALSE, message = "Expected 25000, 7500, NA, 120000 and NA. Use possibly(parse_amount, otherwise = NA_real_).")
+}
+```
+
+## Level 3 complete
+
+You have finished the Advanced level. You can now iterate with purrr, clean text with regular expressions, fit and check statistical models, write reproducible reports, and debug and protect your code. Level 4 looks at how R works underneath: environments, object-oriented programming, performance and packages.
+
+## Your turn
+
+1. Write `read_survey(path)`. It should stop with a clear message if the file does not exist (`file.exists()`), read the CSV, and stop if any of the columns `household_id`, `district` or `household_size` are missing. Test it with a good path and a bad one.
+2. Use `safely()` with `map()` to run `log()` on `list(10, "a", -1, 100)`. Collect the inputs that failed and their error messages in a data frame. Which input gave a warning instead of an error?
+3. Take a function you wrote on Day 10 and make it defensive: check each argument's type and length at the start, with `stopifnot()` and named messages.
+
+```{webr}
+library(dplyr)
+library(purrr)
+hh <- read.csv("data/household-survey.csv")
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Reading only the last line of an error.** The function name and the first line often say more.
+- **Fixing the place where the error appears, not where it starts.** Work backwards to the first step where the data looks wrong.
+- **Ignoring warnings.** They are often the first sign of silent `NA`s or wrong types.
+- **Catching every error.** A `tryCatch()` around everything turns bugs into quiet `NA`s. Catch only the errors you expect.
+- **Leaving `browser()` or debugging `print()` lines in finished code.**
+- **Checking inputs at the end.** Check at the start, before the function does any work.
+
+## Summary
+
+- Read error messages fully. Tracebacks, read from the bottom up, show the chain of calls.
+- Find bugs by repeating them, making them small, checking your assumptions and changing one thing at a time.
+- `message()` informs, `warning()` flags something suspicious, and `stop()` halts. Use `call. = FALSE` for cleaner messages.
+- `tryCatch()` handles expected errors and warnings. purrr's `possibly()` and `safely()` keep loops going.
+- `browser()`, `debugonce()` and breakpoints let you step through code in RStudio.
+- Defensive functions check their inputs early with `stopifnot()` and `match.arg()`. Check your data after every read and join.
+
+**Next:** Level 4 starts on Day 17 with environments and scoping.
+
+## Further reading
+
+- [Advanced R (2e), chapter 8: Conditions](https://adv-r.hadley.nz/conditions.html) and [chapter 22: Debugging](https://adv-r.hadley.nz/debugging.html), by Hadley Wickham.
+- [What they forgot to teach you about R: Debugging R code](https://rstats.wtf/debugging-r), by Jennifer Bryan and Jim Hester.
+- [The reprex package](https://reprex.tidyverse.org/), for asking good questions.

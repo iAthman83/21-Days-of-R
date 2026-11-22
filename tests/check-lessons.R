@@ -51,7 +51,11 @@ parse_lesson <- function(path) {
       while (!grepl("^```r\\s*$", lines[j])) j <- j + 1
       k <- j + 1
       while (!grepl("^```\\s*$", lines[k])) k <- k + 1
-      if (is.null(solutions[[ex]])) solutions[[ex]] <- lines[seq_len(k - j - 1) + j]
+      # A solution that shows inline R code writes it as
+      # `r knitr::inline_expr("code")`, so knitr prints it instead of running
+      # it when the page renders. Undo that here to get the code learners see.
+      sol <- gsub('`r knitr::inline_expr\\("([^"]*)"\\)`', "`r \\1`", lines[seq_len(k - j - 1) + j])
+      if (is.null(solutions[[ex]])) solutions[[ex]] <- sol
       i <- k
     } else if (grepl('^:::\\s*\\{\\s*\\.hint\\s+exercise="([^"]+)"', line)) {
       hints <- c(hints, sub('.*exercise="([^"]+)".*', "\\1", line))

@@ -130,42 +130,42 @@ stringr, lubridate, forcats
 ### Level 3: Advanced
 
 ::: {.day-grid}
-::: {.day-card .soon}
-[Day 12 · coming soon]{.day-num}
+::: {.day-card}
+[Day 12]{.day-num}
 
-**Iteration with purrr**
+**[Iteration with purrr](lessons/day-12-purrr.qmd)**
 
 map() and friends
 :::
 
-::: {.day-card .soon}
-[Day 13 · coming soon]{.day-num}
+::: {.day-card}
+[Day 13]{.day-num}
 
-**Regular expressions**
+**[Regular expressions](lessons/day-13-regex.qmd)**
 
 Match, extract and replace patterns
 :::
 
-::: {.day-card .soon}
-[Day 14 · coming soon]{.day-num}
+::: {.day-card}
+[Day 14]{.day-num}
 
-**Statistical modelling**
+**[Statistical modelling](lessons/day-14-modelling.qmd)**
 
 lm(), glm() and broom
 :::
 
-::: {.day-card .soon}
-[Day 15 · coming soon]{.day-num}
+::: {.day-card}
+[Day 15]{.day-num}
 
-**Reproducible reports with Quarto**
+**[Reproducible reports with Quarto](lessons/day-15-quarto-reports.qmd)**
 
 Mix text, code and charts
 :::
 
-::: {.day-card .soon}
-[Day 16 · coming soon]{.day-num}
+::: {.day-card}
+[Day 16]{.day-num}
 
-**Debugging and defensive code**
+**[Debugging and defensive code](lessons/day-16-debugging.qmd)**
 
 Tracebacks, tryCatch, browser()
 :::

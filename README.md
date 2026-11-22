@@ -35,11 +35,11 @@ Lessons: [CC BY 4.0](LICENSE-CONTENT.md) · Code: [MIT](LICENSE)
 | 9 | Intermediate | Control flow | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-09-control-flow.html) | [`day-09-control-flow.qmd`](lessons/day-09-control-flow.qmd) |
 | 10 | Intermediate | Writing your own functions | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-10-functions.html) | [`day-10-functions.qmd`](lessons/day-10-functions.qmd) |
 | 11 | Intermediate | Strings, dates and factors | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-11-strings-dates-factors.html) | [`day-11-strings-dates-factors.qmd`](lessons/day-11-strings-dates-factors.qmd) |
-| 12 | Advanced | Iteration with purrr | Coming soon |  |
-| 13 | Advanced | Regular expressions | Coming soon |  |
-| 14 | Advanced | Statistical modelling | Coming soon |  |
-| 15 | Advanced | Reproducible reports with Quarto | Coming soon |  |
-| 16 | Advanced | Debugging and defensive code | Coming soon |  |
+| 12 | Advanced | Iteration with purrr | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-12-purrr.html) | [`day-12-purrr.qmd`](lessons/day-12-purrr.qmd) |
+| 13 | Advanced | Regular expressions | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-13-regex.html) | [`day-13-regex.qmd`](lessons/day-13-regex.qmd) |
+| 14 | Advanced | Statistical modelling | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-14-modelling.html) | [`day-14-modelling.qmd`](lessons/day-14-modelling.qmd) |
+| 15 | Advanced | Reproducible reports with Quarto | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-15-quarto-reports.html) | [`day-15-quarto-reports.qmd`](lessons/day-15-quarto-reports.qmd) |
+| 16 | Advanced | Debugging and defensive code | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-16-debugging.html) | [`day-16-debugging.qmd`](lessons/day-16-debugging.qmd) |
 | 17 | Expert | Environments and scoping | Coming soon |  |
 | 18 | Expert | Object-oriented R | Coming soon |  |
 | 19 | Expert | Performance | Coming soon |  |

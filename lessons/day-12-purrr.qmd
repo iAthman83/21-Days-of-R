@@ -1,0 +1,528 @@
+---
+title: "Day 12: Iteration with purrr"
+subtitle: "Replace loops with map(), choose the right output type, iterate over two or more inputs and work with lists of data frames"
+webr:
+  packages:
+    - dplyr
+    - purrr
+    - tidyr
+  resources:
+    - ../data/household-survey.csv
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Advanced · **Time:** about 2.5 hours · **Needs:** [Day 9](day-09-control-flow.qmd) and [Day 10](day-10-functions.qmd) · **Packages:** purrr, dplyr, tidyr · **Data:** `data/household-survey.csv`
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Replace a `for` loop with `map()`.
+2. Choose a typed variant, such as `map_dbl()` or `map_chr()`, so you get a vector back instead of a list.
+3. Write short anonymous functions with `\(x)`.
+4. Iterate over two inputs with `map2()` and over many with `pmap()`.
+5. Split a data frame into groups, apply a function to each and combine the results.
+
+```{webr}
+library(dplyr)
+library(purrr)
+library(tidyr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+## From a loop to `map()`
+
+On Day 9 you stored the results of a loop like this:
+
+```{webr}
+sizes <- c(4, 7, 2, 9)
+doubled <- numeric(length(sizes))
+for (i in seq_along(sizes)) {
+  doubled[i] <- sizes[i] * 2
+}
+doubled
+```
+
+That is five lines of set-up for one idea: "do this to each value". **purrr** says the idea directly. `map()` takes a vector or list and a function, applies the function to each element and returns a list of the results:
+
+```{webr}
+double_it <- function(x) x * 2
+map(sizes, double_it)
+```
+
+You give `map()` the function itself, `double_it`, without brackets. `map()` calls it for you, once per element.
+
+::: {.callout-note}
+## Why not just `sizes * 2`?
+For simple arithmetic you should. Vectorised code (Day 3) is shorter and faster. `map()` is for jobs that are not vectorised: reading several files, fitting a model to each group, or calling a function that only takes one value at a time.
+:::
+
+## Typed variants: get a vector back
+
+`map()` always returns a list, because a list can hold anything. When you know each result is a single value of one type, use a typed variant. It returns a plain vector, and it fails loudly if a result has the wrong type.
+
+| Function | Returns |
+|---|---|
+| `map()` | a list |
+| `map_dbl()` | a numeric (double) vector |
+| `map_int()` | an integer vector |
+| `map_chr()` | a character vector |
+| `map_lgl()` | a logical vector |
+
+```{webr}
+map_dbl(sizes, double_it)
+map_chr(c("gulu", "arua"), toupper)
+map_lgl(list(1, "a", TRUE), is.numeric)
+```
+
+`map_dbl()` used on a function that returns text stops with an error. That is a feature: the problem shows up at once, not three steps later.
+
+```{webr}
+map_dbl(c("gulu", "arua"), toupper) # Error expected: toupper() returns text, not numbers
+```
+
+## Anonymous functions
+
+Writing a named function for a one-off job is clutter. An **anonymous function** is a function without a name, written where you use it. Since R 4.1 the short form is `\(x)`:
+
+```{webr}
+map_dbl(sizes, \(x) x * 2)
+map_dbl(sizes, \(x) x^2 + 1)
+```
+
+`\(x) x * 2` is short for `function(x) x * 2`. You will also see the older purrr shortcut `~ .x * 2` in other people's code. It does the same thing.
+
+Extra arguments to the function go after it:
+
+```{webr}
+incomes <- list(gulu = c(120, NA, 300), arua = c(80, 150), mbale = c(NA, 200, 250))
+map_dbl(incomes, mean)                 # NA where a value is missing
+map_dbl(incomes, mean, na.rm = TRUE)   # na.rm is passed on to mean()
+map_dbl(incomes, \(x) mean(x, na.rm = TRUE))   # the same, written out
+```
+
+Notice that the names of the list (`gulu`, `arua`, `mbale`) carry over to the result.
+
+## Mapping over a data frame
+
+A data frame is a list of columns, so `map()` goes through it column by column:
+
+```{webr}
+hh |> select(household_size, monthly_income_ugx) |> map_dbl(\(col) mean(col, na.rm = TRUE))
+map_chr(hh, class)                # the type of every column
+map_int(hh, \(col) sum(is.na(col)))   # missing values per column
+```
+
+## Two inputs: `map2()`
+
+`map2()` walks along two vectors at the same time. The function gets one element from each:
+
+```{webr}
+income   <- c(600000, 250000, 410000)
+size     <- c(6, 2, 5)
+map2_dbl(income, size, \(inc, n) inc / n)
+```
+
+Here plain division would also work. `map2()` earns its place when the function is not vectorised, for example when each pair produces a sentence:
+
+```{webr}
+districts <- c("Gulu", "Arua", "Mbale")
+counts    <- c(12, 9, 11)
+map2_chr(districts, counts, \(d, n) paste0(d, ": ", n, " households"))
+```
+
+## Many inputs: `pmap()`
+
+`pmap()` takes a **list** of inputs (or a data frame, which is a list of columns) and calls the function once per row. The argument names in the function must match the names in the list:
+
+```{webr}
+plan <- data.frame(
+  district = c("Gulu", "Arua"),
+  target   = c(15, 10),
+  done     = c(12, 9)
+)
+pmap_chr(plan, \(district, target, done) {
+  paste0(district, ": ", done, " of ", target, " (", round(100 * done / target), "%)")
+})
+```
+
+## Lists of data frames
+
+This is where purrr pays off in real work. `split()` breaks a data frame into a list with one data frame per group:
+
+```{webr}
+by_district <- split(hh, hh$district)
+names(by_district)
+map_int(by_district, nrow)
+```
+
+Apply any function to each piece. When each result is a data frame, `list_rbind()` stacks them back into one:
+
+```{webr}
+summarise_one <- function(df) {
+  data.frame(
+    households  = nrow(df),
+    mean_income = mean(df$monthly_income_ugx, na.rm = TRUE)
+  )
+}
+
+by_district |>
+  map(summarise_one) |>
+  list_rbind(names_to = "district")
+```
+
+`names_to` keeps the names of the list as a column, so you know which row came from which district.
+
+::: {.callout-tip}
+## Real-world use: read many files at once
+The most common use of this pattern is reading a folder of CSV files with the same columns:
+
+```r
+files <- list.files("data/monthly", pattern = "\\.csv$", full.names = TRUE)
+all_months <- files |>
+  set_names(basename) |>
+  map(read.csv) |>
+  list_rbind(names_to = "file")
+```
+
+This runs on your own computer, where you have a folder of files.
+:::
+
+### Nested data frames
+
+tidyr can keep the pieces inside the data frame itself. `nest()` puts each group's rows into a list-column called `data`. You then `map()` over that column inside `mutate()`:
+
+```{webr}
+nested <- hh |>
+  group_by(district) |>
+  nest()
+nested
+
+nested |>
+  mutate(
+    n           = map_int(data, nrow),
+    max_income  = map_dbl(data, \(df) max(df$monthly_income_ugx, na.rm = TRUE)),
+    top_crop    = map_chr(data, \(df) names(which.max(table(df$main_crop))))
+  ) |>
+  select(-data)
+```
+
+For simple summaries, `group_by()` and `summarise()` from Day 6 are easier. Nesting is worth it when each group needs something that does not return a single number, such as a fitted model. You will use it that way on Day 14.
+
+## Other useful purrr functions
+
+```{webr}
+keep(incomes, \(x) length(x) > 2)        # keep elements where the test is TRUE
+discard(incomes, \(x) anyNA(x))          # drop elements where it is TRUE
+reduce(c(1, 2, 3, 4), `+`)               # combine step by step: ((1 + 2) + 3) + 4
+walk(c("Gulu", "Arua"), \(d) cat("Processing", d, "\n"))   # for side effects, returns nothing useful
+```
+
+`walk()` is `map()` for functions you call for their side effect, such as printing, saving a file or drawing a plot.
+
+::: {.callout-tip}
+## Excel bridge
+In Excel you would fill a formula down a column. `map()` is the same idea, but it works with anything: files, lists, models or whole tables, not just cells.
+:::
+
+## Exercises
+
+### Exercise 1: Your first `map()`
+
+Use a typed variant of `map()` to get the square root of each number as a **numeric vector**. Save it as `roots`.
+
+```{webr}
+#| exercise: ex12_map
+#| setup: true
+library(purrr)
+values <- c(4, 9, 16, 25)
+```
+
+```{webr}
+#| exercise: ex12_map
+roots <- ______(values, sqrt)
+roots
+```
+
+::: {.hint exercise="ex12_map"}
+::: {.callout-note collapse="false"}
+## Hint
+`map()` would return a list. For numbers, use `map_dbl()`.
+:::
+:::
+
+::: {.solution exercise="ex12_map"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+roots <- map_dbl(values, sqrt)
+roots
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex12_map
+#| check: true
+if (!exists("roots")) {
+  list(correct = FALSE, message = "Save the result as roots.")
+} else if (is.list(roots)) {
+  list(correct = FALSE, message = "roots is a list. Use map_dbl() to get a numeric vector.")
+} else if (isTRUE(all.equal(roots, c(2, 3, 4, 5)))) {
+  list(correct = TRUE, message = "Correct. map_dbl() returns a plain numeric vector.")
+} else {
+  list(correct = FALSE, message = "roots should be c(2, 3, 4, 5). Pass sqrt without brackets.")
+}
+```
+
+### Exercise 2: An anonymous function with a missing value
+
+Each element of `scores` is one district's scores, and some are missing. Use `map_dbl()` with an anonymous function to get the **mean score of each district, ignoring missing values**. Save it as `district_means`.
+
+```{webr}
+#| exercise: ex12_lambda
+#| setup: true
+library(purrr)
+scores <- list(gulu = c(70, 85, NA), arua = c(60, 75), mbale = c(NA, 90, 80))
+```
+
+```{webr}
+#| exercise: ex12_lambda
+district_means <- map_dbl(scores, \(x) ______)
+district_means
+```
+
+::: {.hint exercise="ex12_lambda"}
+::: {.callout-note collapse="false"}
+## Hint
+Inside the function, `x` is one district's scores. Use `mean(x, na.rm = TRUE)`.
+:::
+:::
+
+::: {.solution exercise="ex12_lambda"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+district_means <- map_dbl(scores, \(x) mean(x, na.rm = TRUE))
+district_means
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex12_lambda
+#| check: true
+expected <- c(gulu = 77.5, arua = 67.5, mbale = 85)
+if (!exists("district_means")) {
+  list(correct = FALSE, message = "Save the result as district_means.")
+} else if (anyNA(district_means)) {
+  list(correct = FALSE, message = "Some means are NA. Add na.rm = TRUE inside mean().")
+} else if (isTRUE(all.equal(district_means, expected))) {
+  list(correct = TRUE, message = "Correct. The district names carried over to the result.")
+} else {
+  list(correct = FALSE, message = "Use map_dbl(scores, \\(x) mean(x, na.rm = TRUE)).")
+}
+```
+
+### Exercise 3: Two inputs with `map2()`
+
+Use `map2_chr()` to build one label per district in the form `"Gulu (12)"`. Save it as `district_labels`.
+
+```{webr}
+#| exercise: ex12_map2
+#| setup: true
+library(purrr)
+districts <- c("Gulu", "Arua", "Mbale")
+counts <- c(12, 9, 11)
+```
+
+```{webr}
+#| exercise: ex12_map2
+district_labels <- map2_chr(districts, counts, \(d, n) paste0(______))
+district_labels
+```
+
+::: {.hint exercise="ex12_map2"}
+::: {.callout-note collapse="false"}
+## Hint
+`paste0()` joins its pieces with no space: `paste0(d, " (", n, ")")`.
+:::
+:::
+
+::: {.solution exercise="ex12_map2"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+district_labels <- map2_chr(districts, counts, \(d, n) paste0(d, " (", n, ")"))
+district_labels
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex12_map2
+#| check: true
+if (!exists("district_labels") || !is.character(district_labels)) {
+  list(correct = FALSE, message = "district_labels should be a character vector. Use map2_chr().")
+} else if (identical(unname(district_labels), c("Gulu (12)", "Arua (9)", "Mbale (11)"))) {
+  list(correct = TRUE, message = "Correct.")
+} else {
+  list(correct = FALSE, message = "The first label should be exactly \"Gulu (12)\". Check the spaces and brackets.")
+}
+```
+
+### Exercise 4: Count missing values in every column
+
+Use a typed `map` function on the survey data frame to count the missing values in **each column**. The result should be an integer vector named by column. Save it as `n_missing`.
+
+```{webr}
+#| exercise: ex12_columns
+#| setup: true
+library(purrr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex12_columns
+n_missing <- ______(hh, \(col) sum(is.na(col)))
+n_missing
+```
+
+::: {.hint exercise="ex12_columns"}
+::: {.callout-note collapse="false"}
+## Hint
+A data frame is a list of columns. `sum()` of logical values is a whole number, so use `map_int()`.
+:::
+:::
+
+::: {.solution exercise="ex12_columns"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+n_missing <- map_int(hh, \(col) sum(is.na(col)))
+n_missing
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex12_columns
+#| check: true
+if (!exists("n_missing") || is.list(n_missing)) {
+  list(correct = FALSE, message = "n_missing should be a vector, not a list. Use map_int().")
+} else if (!identical(names(n_missing), names(hh))) {
+  list(correct = FALSE, message = "There should be one value per column of hh, named by column.")
+} else if (identical(as.integer(n_missing), as.integer(colSums(is.na(hh))))) {
+  list(correct = TRUE, message = "Correct. Only monthly_income_ugx has missing values (3).")
+} else {
+  list(correct = FALSE, message = "Count the missing values with sum(is.na(col)).")
+}
+```
+
+### Exercise 5: Split, apply, combine
+
+Split the survey by `main_crop`. For each crop, build a one-row data frame with `households` (the number of rows) and `mean_size` (the mean `household_size`). Stack the results with `list_rbind()` and keep the crop names in a column called `crop`. Save the result as `crop_summary`.
+
+```{webr}
+#| exercise: ex12_split
+#| setup: true
+library(purrr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex12_split
+crop_summary <- split(hh, hh$main_crop) |>
+  map(\(df) data.frame(
+    households = ______,
+    mean_size  = ______
+  )) |>
+  list_rbind(names_to = ______)
+crop_summary
+```
+
+::: {.hint exercise="ex12_split"}
+::: {.callout-note collapse="false"}
+## Hint
+Inside the function, `df` is one crop's rows: use `nrow(df)` and `mean(df$household_size)`. The last blank is `"crop"`, in quotes.
+:::
+:::
+
+::: {.solution exercise="ex12_split"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+crop_summary <- split(hh, hh$main_crop) |>
+  map(\(df) data.frame(
+    households = nrow(df),
+    mean_size  = mean(df$household_size)
+  )) |>
+  list_rbind(names_to = "crop")
+crop_summary
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex12_split
+#| check: true
+expected <- aggregate(household_size ~ main_crop, data = hh, FUN = mean)
+expected_n <- as.vector(table(hh$main_crop)[expected$main_crop])
+if (!exists("crop_summary") || !is.data.frame(crop_summary)) {
+  list(correct = FALSE, message = "crop_summary should be a data frame. Finish with list_rbind().")
+} else if (!"crop" %in% names(crop_summary)) {
+  list(correct = FALSE, message = "Add names_to = \"crop\" inside list_rbind() so the crop names become a column.")
+} else if (!all(c("households", "mean_size") %in% names(crop_summary))) {
+  list(correct = FALSE, message = "crop_summary needs the columns households and mean_size.")
+} else {
+  got <- crop_summary[match(expected$main_crop, crop_summary$crop), ]
+  if (isTRUE(all.equal(got$households, expected_n)) && isTRUE(all.equal(got$mean_size, expected$household_size))) {
+    list(correct = TRUE, message = "Correct. Split, apply, combine is the pattern behind group_by() and summarise().")
+  } else {
+    list(correct = FALSE, message = "Check the values: households = nrow(df) and mean_size = mean(df$household_size).")
+  }
+}
+```
+
+## Your turn
+
+1. Use `map_chr(hh, class)` to list the column types. Then use `keep()` on `hh` to return only the numeric columns. (Hint: `keep(hh, is.numeric)`.)
+2. For each district, find the household with the highest income. Use `split()`, `map()` with `slice_max()` from Day 6, and `list_rbind()`.
+3. Write a function `describe(df)` that returns a sentence such as `"Gulu: 12 households, mean size 5.3"`. Nest the survey by district and add the sentence as a new column with `map2_chr()`, using the `district` and `data` columns.
+
+```{webr}
+library(dplyr)
+library(purrr)
+library(tidyr)
+hh <- read.csv("data/household-survey.csv")
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Adding brackets to the function.** `map(x, sqrt())` fails. Pass the function itself: `map(x, sqrt)`.
+- **Using `map()` when you wanted a vector.** If you see `[[1]]` in the output, you have a list. Switch to `map_dbl()`, `map_chr()` and so on.
+- **Using a typed variant when results have different lengths.** `map_dbl()` needs exactly one number per element. If a result can have several values, use `map()` and keep the list.
+- **Mismatched names in `pmap()`.** The function's argument names must match the column or element names in the list.
+- **Reaching for `map()` when R is already vectorised.** `x * 2` beats `map_dbl(x, \(v) v * 2)`.
+
+## Summary
+
+- `map(.x, .f)` applies `.f` to each element of `.x` and returns a list.
+- `map_dbl()`, `map_int()`, `map_chr()` and `map_lgl()` return vectors of one type and fail loudly on the wrong type.
+- `\(x) ...` writes a short anonymous function. Extra arguments to `.f` go after it.
+- `map2()` iterates over two inputs, `pmap()` over a list or data frame of inputs.
+- `split()`, `map()` and `list_rbind()` apply a function to each group and stack the results. `nest()` keeps the groups in a list-column.
+- `keep()`, `discard()`, `reduce()` and `walk()` cover filtering, combining and side effects.
+
+**Next:** on Day 13 you will learn regular expressions, the pattern language behind `str_detect()` and `str_extract()`.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 26: Iteration](https://r4ds.hadley.nz/iteration).
+- [Advanced R (2e), chapter 9: Functionals](https://adv-r.hadley.nz/functionals.html), by Hadley Wickham.
+- [purrr documentation](https://purrr.tidyverse.org/).

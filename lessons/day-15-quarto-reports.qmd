@@ -1,0 +1,617 @@
+---
+title: "Day 15: Reproducible reports with Quarto"
+subtitle: "Write one document that holds your text, code, tables and charts, and rebuilds itself when the data changes"
+webr:
+  packages:
+    - dplyr
+    - knitr
+  resources:
+    - ../data/household-survey.csv
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Advanced · **Time:** about 2 hours · **Needs:** [Day 8](day-08-ggplot2.qmd) · **Packages:** knitr, dplyr · **Data:** `data/household-survey.csv` · **Needs R on your computer** for rendering
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Explain what makes a report reproducible.
+2. Write a Quarto document with a YAML header, Markdown text and R code chunks.
+3. Control what each chunk shows with chunk options.
+4. Put live numbers in sentences with inline code, and format them for readers.
+5. Render a document to HTML on your own computer.
+
+::: {.callout-important}
+## Part of today runs on your own computer
+Rendering a Quarto document needs Quarto and R on your computer. Follow the [setup guide](../setup.qmd) first. RStudio includes Quarto, so if you have a recent RStudio you are ready.
+
+You can still do the exercises in the browser. They use `knitr`, the engine Quarto uses to run R code, to show you exactly what each option does.
+:::
+
+```{webr}
+library(dplyr)
+library(knitr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+## Why reproducible reports
+
+The usual way to write a report: run the analysis, copy the numbers into Word, paste in a chart and send it. Then the data changes. Someone finds an error, or a late batch of interviews arrives, and every number and chart has to be found and replaced by hand.
+
+A **reproducible report** keeps the text and the code that produces every number in the same file. When the data changes, you render the file again and everything updates. Anyone with the file and the data gets the same report.
+
+This course is written this way. Every lesson is a Quarto file.
+
+## The parts of a Quarto document
+
+A Quarto document is a plain-text file ending in `.qmd`. It has three parts:
+
+````markdown
+---
+title: "Household survey: first results"
+author: "Your name"
+date: today
+format: html
+---
+
+## Summary
+
+We interviewed households in four districts.
+
+```{{r}}
+library(dplyr)
+hh <- read.csv("data/household-survey.csv")
+nrow(hh)
+```
+````
+
+1. **The YAML header**, between the two `---` lines. It sets the title, author, date and output format. YAML is a simple `key: value` format, and indentation matters.
+2. **Text** written in **Markdown**.
+3. **Code chunks**, which start with ```` ```{r} ```` and end with ```` ``` ````. When you render, Quarto runs each chunk and puts the output below it.
+
+### Markdown in one minute
+
+| You type | You get |
+|---|---|
+| `# Heading 1`, `## Heading 2` | headings |
+| `**bold**`, `*italic*` | **bold**, *italic* |
+| `- item` | a bullet list |
+| `1. item` | a numbered list |
+| `[link text](https://quarto.org)` | a link |
+| `![Caption](chart.png)` | an image |
+| `` `code` `` | `code` |
+
+Leave a blank line between paragraphs, and before and after lists and headings.
+
+## Code chunks and options
+
+Chunk **options** control what appears in the report. In Quarto, put them at the top of the chunk, each on its own line starting with `#|`:
+
+````markdown
+```{{r}}
+#| echo: false
+#| fig-cap: "Households per district"
+barplot(table(hh$district))
+```
+````
+
+The options you will use most:
+
+| Option | Effect |
+|---|---|
+| `echo: false` | hide the code, show the output |
+| `eval: false` | show the code, do not run it |
+| `include: false` | run the code, show nothing (useful for loading packages and data) |
+| `warning: false` | hide warnings |
+| `message: false` | hide messages, such as the ones packages print when they load |
+| `fig-cap: "..."` | add a caption to a chart |
+| `fig-width: 8`, `fig-height: 4` | set a chart's size in inches |
+| `label: fig-districts` | name the chunk, so the text can refer to the chart as `@fig-districts` |
+
+To set an option for the whole document, put it in the YAML header under `execute:`:
+
+```yaml
+execute:
+  echo: false
+  warning: false
+```
+
+A report for managers usually hides all code. A report for colleagues who check your work usually shows it.
+
+### See it for yourself
+
+Quarto hands the R chunks to **knitr**, which runs them and writes Markdown. You can call knitr in the browser to see what it produces. The code below builds a small document as text and knits it. (`fence` is three backticks, built in code so this page does not mistake it for the end of a block.)
+
+```{webr}
+fence <- strrep("`", 3)
+
+doc <- c(
+  "Some text.",
+  "",
+  paste0(fence, "{r}"),
+  "x <- c(4, 8, 15)",
+  "mean(x)",
+  fence
+)
+
+knit(text = paste(doc, collapse = "\n"), quiet = TRUE) |> cat()
+```
+
+The output contains the code (marked `r`) and the result (each line starting `##`). Now hide the code with `echo: false`:
+
+```{webr}
+doc_hidden <- c(
+  paste0(fence, "{r}"),
+  "#| echo: false",
+  "x <- c(4, 8, 15)",
+  "mean(x)",
+  fence
+)
+
+knit(text = paste(doc_hidden, collapse = "\n"), quiet = TRUE) |> cat()
+```
+
+Only the result is left. Try changing `echo: false` to `eval: false` or `include: false` and run the block again.
+
+## Inline code: numbers in sentences
+
+Chunks are for code and output. To put a number **inside a sentence**, use inline code: a backtick, the letter `r`, a space, your code and a closing backtick.
+
+````markdown
+We interviewed `r knitr::inline_expr("nrow(hh)")` households in `r knitr::inline_expr("n_distinct(hh$district)")` districts.
+````
+
+renders as:
+
+> We interviewed 40 households in 4 districts.
+
+When the data changes, the sentence changes with it. Never type a number from your results into the text by hand.
+
+```{webr}
+sentence <- "We interviewed `r nrow(hh)` households in `r dplyr::n_distinct(hh$district)` districts."
+knit(text = sentence, quiet = TRUE)
+```
+
+### Format numbers for readers
+
+R prints numbers for programmers. Readers want rounding and thousands separators:
+
+```{webr}
+mean_income <- mean(hh$monthly_income_ugx, na.rm = TRUE)
+print(mean_income, digits = 10)               # the full value has decimals
+round(mean_income)
+format(round(mean_income), big.mark = ",")    # "490,027"
+paste0(round(100 * mean(hh$has_water == "yes")), "%")
+```
+
+Do this formatting in a chunk with `include: false` and use the short names inline. It keeps the text easy to read.
+
+## Tables
+
+Printing a data frame gives console-style output. `knitr::kable()` turns it into a proper table:
+
+```{webr}
+by_district <- hh |>
+  group_by(district) |>
+  summarise(
+    households  = n(),
+    mean_income = round(mean(monthly_income_ugx, na.rm = TRUE))
+  )
+
+kable(by_district)
+```
+
+In a rendered report, and on this page, `kable()` output becomes a formatted table. Set clearer column names and a caption with `col.names` and `caption`:
+
+```{webr}
+kable(
+  by_district,
+  col.names = c("District", "Households", "Mean income (UGX)"),
+  format.args = list(big.mark = ","),
+  caption = "Households and mean monthly income by district"
+)
+```
+
+For more styling, look at the gt package once you are comfortable with `kable()`.
+
+## Rendering on your own computer
+
+::: {.callout-important}
+## Run this on your own computer
+1. In RStudio, choose **File → New File → Quarto Document…**, give it a title, and click **Create**.
+2. Save it as `report.qmd` in your project folder, next to a `data` folder that holds `household-survey.csv`.
+3. Click **Render** (or press Ctrl+Shift+K, or Cmd+Shift+K on a Mac). An HTML file appears next to `report.qmd` and opens in the Viewer.
+:::
+
+You can also render from the Terminal or from R:
+
+```sh
+quarto render report.qmd
+quarto render report.qmd --to docx    # a Word document
+```
+
+```r
+quarto::quarto_render("report.qmd")   # needs install.packages("quarto")
+```
+
+Change `format: html` in the YAML header to `docx` for Word or `pdf` for PDF. PDF needs a LaTeX installation. Run `quarto install tinytex` once in the Terminal to get one.
+
+::: {.callout-note}
+## Rendering starts from a clean slate
+Quarto runs your document in a **fresh R session**. Objects in your RStudio Environment do not exist there. If the document uses `hh`, a chunk in the document must create `hh`. This is what makes the report reproducible, and it is the most common cause of "it works in the Console but not when I render".
+:::
+
+### Parameters: one template, many reports
+
+A **parameter** is a value set in the YAML header that the code can use. Change the parameter, render again, and you get a new report from the same file:
+
+````markdown
+---
+title: "District report"
+format: html
+params:
+  district: "Gulu"
+---
+
+```{{r}}
+#| include: false
+library(dplyr)
+hh <- read.csv("data/household-survey.csv") |>
+  filter(district == params$district)
+```
+
+## `r knitr::inline_expr("params$district")`
+
+This district has `r knitr::inline_expr("nrow(hh)")` households in the survey.
+````
+
+Render one report per district from the Terminal:
+
+```sh
+quarto render district-report.qmd -P district:Arua --output arua.html
+```
+
+Or loop over the districts in R, using `walk()` from Day 12:
+
+```r
+purrr::walk(c("Gulu", "Arua", "Mbale", "Hoima"), \(d) {
+  quarto::quarto_render(
+    "district-report.qmd",
+    execute_params = list(district = d),
+    output_file = paste0(tolower(d), ".html")
+  )
+})
+```
+
+## Habits that keep reports reproducible
+
+- **Use relative paths**, such as `data/household-survey.csv`, not `C:/Users/me/Desktop/...`. Work inside an RStudio Project so the working directory is always the project folder.
+- **Never use `setwd()`** in a report. It breaks on every other computer.
+- **Load every package in the document**, in a chunk near the top.
+- **Keep raw data read-only.** Clean it in code, never by hand in Excel.
+- **Set a seed** with `set.seed()` before anything random, so random results are the same each time.
+- **Record your setup.** End long reports with a chunk that runs `sessionInfo()`, so readers can see the R and package versions.
+
+::: {.callout-tip}
+## Excel bridge
+In Excel, a chart linked to a range updates when the cells change, but a number typed into a Word report does not. A Quarto report links everything: text, numbers, tables and charts all come from the data each time you render.
+:::
+
+## Exercises
+
+### Exercise 1: Write a YAML header
+
+Write a YAML header with the title `"Survey report"`, the author `"Field team"` and the format `html`. Save it as the text `header`. (The `---` lines are already there.)
+
+```{webr}
+#| exercise: ex15_yaml
+header <- "---
+title: ______
+author: ______
+format: ______
+---"
+cat(header)
+```
+
+::: {.hint exercise="ex15_yaml"}
+::: {.callout-note collapse="false"}
+## Hint
+Each line is `key: value`. Put the title and author in quotes: `title: "Survey report"`. The format needs no quotes: `format: html`.
+:::
+:::
+
+::: {.solution exercise="ex15_yaml"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+header <- "---
+title: \"Survey report\"
+author: \"Field team\"
+format: html
+---"
+cat(header)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex15_yaml
+#| check: true
+inner <- sub("^---\\s*\n", "", sub("\n---\\s*$", "", header))
+parsed <- tryCatch(yaml::yaml.load(inner), error = function(e) NULL)
+if (is.null(parsed) || !is.list(parsed)) {
+  list(correct = FALSE, message = "The header is not valid YAML. Each line should be key: value, with a space after the colon.")
+} else if (!identical(parsed$title, "Survey report")) {
+  list(correct = FALSE, message = "Set title: \"Survey report\".")
+} else if (!identical(parsed$author, "Field team")) {
+  list(correct = FALSE, message = "Set author: \"Field team\".")
+} else if (!identical(parsed$format, "html")) {
+  list(correct = FALSE, message = "Set format: html.")
+} else {
+  list(correct = TRUE, message = "Correct. This header would render to an HTML page titled Survey report.")
+}
+```
+
+### Exercise 2: Hide the code
+
+This chunk should show only its **result** in the report, not its code. Add the right chunk option, then knit it. Save the knitted output as `out`.
+
+```{webr}
+#| exercise: ex15_echo
+#| setup: true
+library(knitr)
+fence <- strrep("`", 3)
+```
+
+```{webr}
+#| exercise: ex15_echo
+chunk <- c(
+  paste0(fence, "{r}"),
+  "#| ______",
+  "sum(c(12, 9, 11))",
+  fence
+)
+out <- knit(text = paste(chunk, collapse = "\n"), quiet = TRUE)
+cat(out)
+```
+
+::: {.hint exercise="ex15_echo"}
+::: {.callout-note collapse="false"}
+## Hint
+`echo` controls whether the code is shown. The option line is `"#| echo: false"`.
+:::
+:::
+
+::: {.solution exercise="ex15_echo"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+chunk <- c(
+  paste0(fence, "{r}"),
+  "#| echo: false",
+  "sum(c(12, 9, 11))",
+  fence
+)
+out <- knit(text = paste(chunk, collapse = "\n"), quiet = TRUE)
+cat(out)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex15_echo
+#| check: true
+if (!exists("out") || !is.character(out)) {
+  list(correct = FALSE, message = "Save the knitted output as out.")
+} else {
+  shows_code <- grepl("sum(c(12, 9, 11))", out, fixed = TRUE)
+  shows_result <- grepl("32", out, fixed = TRUE)
+  if (shows_code && shows_result) {
+    list(correct = FALSE, message = "The code is still shown. Use echo: false.")
+  } else if (!shows_result) {
+    list(correct = FALSE, message = "The result 32 is missing too. echo: false hides the code but keeps the result. eval: false and include: false hide the result.")
+  } else {
+    list(correct = TRUE, message = "Correct. Only the result, 32, is left.")
+  }
+}
+```
+
+### Exercise 3: Inline code
+
+Write a sentence that uses **inline code** to say how many households are in `hh`, in the form `"The survey has 40 households."`. Do not type the number 40 yourself. Knit it and save the output as `sentence_out`.
+
+```{webr}
+#| exercise: ex15_inline
+#| setup: true
+library(knitr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex15_inline
+sentence <- "The survey has ______ households."
+sentence_out <- knit(text = sentence, quiet = TRUE)
+sentence_out
+```
+
+::: {.hint exercise="ex15_inline"}
+::: {.callout-note collapse="false"}
+## Hint
+Inline code is a backtick, `r`, a space, the code and a backtick. The code is `nrow(hh)`.
+:::
+:::
+
+::: {.solution exercise="ex15_inline"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+sentence <- "The survey has `r knitr::inline_expr("nrow(hh)")` households."
+sentence_out <- knit(text = sentence, quiet = TRUE)
+sentence_out
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex15_inline
+#| check: true
+if (!exists("sentence") || !exists("sentence_out")) {
+  list(correct = FALSE, message = "Keep the names sentence and sentence_out.")
+} else if (!grepl("`r ", sentence, fixed = TRUE)) {
+  list(correct = FALSE, message = "Use inline code: `r nrow(hh)`, with backticks, the letter r and a space.")
+} else if (identical(trimws(sentence_out), "The survey has 40 households.")) {
+  list(correct = TRUE, message = "Correct. If more households are added, the sentence updates itself.")
+} else {
+  list(correct = FALSE, message = "The knitted sentence should be exactly: The survey has 40 households.")
+}
+```
+
+### Exercise 4: Format a number
+
+Reports should show `490,027`, not `490027.027`. Round the mean income to a whole number and add a comma as the thousands separator. Save the result as `income_text`.
+
+```{webr}
+#| exercise: ex15_format
+#| setup: true
+hh <- read.csv("data/household-survey.csv")
+mean_income <- mean(hh$monthly_income_ugx, na.rm = TRUE)
+```
+
+```{webr}
+#| exercise: ex15_format
+income_text <- format(round(______), big.mark = ______)
+income_text
+```
+
+::: {.hint exercise="ex15_format"}
+::: {.callout-note collapse="false"}
+## Hint
+Round `mean_income`, then set `big.mark = ","`.
+:::
+:::
+
+::: {.solution exercise="ex15_format"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+income_text <- format(round(mean_income), big.mark = ",")
+income_text
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex15_format
+#| check: true
+expected <- format(round(mean_income), big.mark = ",")
+if (!exists("income_text") || !is.character(income_text)) {
+  list(correct = FALSE, message = "income_text should be text. format() returns text.")
+} else if (identical(income_text, expected)) {
+  list(correct = TRUE, message = paste0("Correct: ", expected, " UGX reads much better than ", mean_income, "."))
+} else if (!grepl(",", income_text, fixed = TRUE)) {
+  list(correct = FALSE, message = "Add big.mark = \",\" to get the thousands separator.")
+} else {
+  list(correct = FALSE, message = "Round to a whole number first: format(round(mean_income), big.mark = \",\").")
+}
+```
+
+### Exercise 5: A table for the report
+
+Summarise the survey by `main_crop`, with the number of households in a column `households`. Then turn it into a table with `kable()`, using the column names `"Main crop"` and `"Households"`. Save the table as `tbl`.
+
+```{webr}
+#| exercise: ex15_kable
+#| setup: true
+library(dplyr)
+library(knitr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex15_kable
+crops <- hh |>
+  count(main_crop, name = "households")
+tbl <- kable(crops, col.names = ______)
+tbl
+```
+
+::: {.hint exercise="ex15_kable"}
+::: {.callout-note collapse="false"}
+## Hint
+`col.names` takes one name per column, in a vector: `c("Main crop", "Households")`.
+:::
+:::
+
+::: {.solution exercise="ex15_kable"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+crops <- hh |>
+  count(main_crop, name = "households")
+tbl <- kable(crops, col.names = c("Main crop", "Households"))
+tbl
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex15_kable
+#| check: true
+if (!exists("tbl") || !inherits(tbl, "knitr_kable")) {
+  list(correct = FALSE, message = "tbl should be made with kable().")
+} else if (!grepl("Main crop", tbl[1], fixed = TRUE) || !grepl("Households", tbl[1], fixed = TRUE)) {
+  list(correct = FALSE, message = "Set col.names = c(\"Main crop\", \"Households\").")
+} else if (length(tbl) != 2 + n_distinct(hh$main_crop)) {
+  list(correct = FALSE, message = "The table should have one row per crop. Use count(main_crop).")
+} else {
+  list(correct = TRUE, message = "Correct. In a rendered report this becomes a formatted table.")
+}
+```
+
+## Your turn
+
+Do this on your own computer.
+
+1. Create a Quarto document called `survey-report.qmd`. In it, load the survey, then write a short report with: a summary sentence using inline code, a table of households and mean income by district, and a bar chart of main crops with a caption. Hide all code with `execute: echo: false` in the YAML header.
+2. Render it to HTML, then change `format:` to `docx` and render it again.
+3. Turn the district into a parameter and render one report per district with `walk()`.
+
+You can try the pieces here first:
+
+```{webr}
+library(dplyr)
+library(knitr)
+hh <- read.csv("data/household-survey.csv")
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Using objects that only exist in your Console.** Rendering starts a fresh session. Create every object in the document.
+- **Typing results into the text.** Use inline code, or the numbers go stale.
+- **Broken YAML.** A missing space after the colon, a tab instead of spaces, or a missing `---` stops the render. Read the error: it gives the line.
+- **Absolute paths and `setwd()`.** They work only on your computer.
+- **Forgetting a blank line** before a list or heading in Markdown, so it renders as plain text.
+- **Using `eval: false` when you meant `echo: false`.** `eval: false` does not run the code, so later chunks may fail.
+
+## Summary
+
+- A reproducible report keeps text and code in one file, so every number, table and chart updates when you render again.
+- A Quarto document has a YAML header, Markdown text and code chunks.
+- Chunk options such as `echo`, `eval`, `include`, `warning` and `fig-cap` control what the reader sees. Set them per chunk with `#|` or for the whole document under `execute:`.
+- Inline code (a backtick, `r`, a space, code, a backtick) puts live numbers in sentences. Format them with `round()` and `format(big.mark = ",")`.
+- `kable()` makes tables. Render with the **Render** button or `quarto render`.
+- Parameters turn one document into a template for many reports.
+
+**Next:** on Day 16 you will learn to find and fix bugs, and to write code that fails clearly when something is wrong.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 28: Quarto](https://r4ds.hadley.nz/quarto) and [chapter 29: Quarto formats](https://r4ds.hadley.nz/quarto-formats).
+- [Quarto: Get started with R](https://quarto.org/docs/get-started/hello/rstudio.html) and the [guide to execution options](https://quarto.org/docs/computations/execution-options.html).
+- [What they forgot to teach you about R: Project-oriented workflow](https://rstats.wtf/projects), by Jennifer Bryan and Jim Hester.

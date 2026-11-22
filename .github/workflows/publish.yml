@@ -39,6 +39,8 @@ jobs:
             any::stringr
             any::lubridate
             any::forcats
+            any::purrr
+            any::broom
 
       - name: Run every lesson example and exercise solution
         run: Rscript tests/check-lessons.R

@@ -1,0 +1,576 @@
+---
+title: "Day 14: Statistical modelling"
+subtitle: "Fit and interpret linear and logistic regression, check residuals, tidy the output with broom and compare models"
+webr:
+  packages:
+    - dplyr
+    - ggplot2
+    - palmerpenguins
+    - broom
+    - purrr
+    - tidyr
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Advanced · **Time:** about 3 hours · **Needs:** [Day 6](day-06-dplyr.qmd) and [Day 8](day-08-ggplot2.qmd) · **Packages:** broom, dplyr, ggplot2, palmerpenguins, purrr, tidyr · **Data:** `penguins`
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Fit a linear regression with `lm()` and read its coefficients.
+2. Add categorical predictors and interpret the result.
+3. Check a model's assumptions with residual plots.
+4. Turn model output into data frames with broom's `tidy()`, `glance()` and `augment()`.
+5. Fit a logistic regression with `glm()` for a yes/no outcome.
+6. Compare models and choose between them.
+
+```{webr}
+library(dplyr)
+library(ggplot2)
+library(palmerpenguins)
+library(broom)
+library(purrr)
+library(tidyr)
+```
+
+::: {.callout-note}
+## What this lesson is and is not
+This lesson teaches you to fit, read and check common models in R. It is not a statistics course. If terms such as *p-value* or *confidence interval* are new to you, the further reading at the end has free introductions.
+:::
+
+## A first model: `lm()`
+
+Heavier penguins tend to have longer flippers. A **linear model** puts a straight line through that relationship:
+
+```{webr}
+ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Flipper length (mm)", y = "Body mass (g)")
+```
+
+`lm()` fits the line. Its first argument is a **formula**: the outcome on the left of `~` and the predictors on the right.
+
+```{webr}
+m1 <- lm(body_mass_g ~ flipper_length_mm, data = penguins)
+m1
+```
+
+The model is: body mass = −5781 + 49.7 × flipper length.
+
+- The **slope** (49.7) is the important number. Each extra millimetre of flipper goes with about 50 g more body mass, on average.
+- The **intercept** (−5781) is the predicted mass when flipper length is 0. No penguin has a 0 mm flipper, so it has no real meaning here. It just positions the line.
+
+`summary()` gives the full report:
+
+```{webr}
+summary(m1)
+```
+
+The main parts:
+
+- **Estimate** and **Std. Error**: each coefficient and how uncertain it is.
+- **Pr(>|t|)**: the p-value. A small value means a slope this large would be very unlikely if there were no relationship.
+- **R-squared**: the share of the variation in body mass that the model explains. 0.76 means flipper length explains about 76%.
+- R dropped 2 rows with missing values. `lm()` does this silently, so check `nobs(m1)` against `nrow()` of your data.
+
+## Tidy model output with broom
+
+`summary()` prints well but is awkward to use in code. **broom** turns models into data frames, so you can filter, join and plot the results with the tools you already know.
+
+| Function | Returns | One row per… |
+|---|---|---|
+| `tidy()` | coefficients | term |
+| `glance()` | model-level statistics, such as R² and AIC | model |
+| `augment()` | the data plus fitted values and residuals | observation |
+
+```{webr}
+tidy(m1)
+tidy(m1, conf.int = TRUE)   # add 95% confidence intervals
+glance(m1)
+augment(m1) |> head()
+```
+
+## Predictions
+
+`predict()` uses the model on new data. The new data must have the same column names as the predictors:
+
+```{webr}
+new_penguins <- data.frame(flipper_length_mm = c(180, 200, 220))
+predict(m1, newdata = new_penguins)
+predict(m1, newdata = new_penguins, interval = "prediction")   # with a range for single penguins
+```
+
+Predict only inside the range of the data you fitted. These flippers range from 172 to 231 mm, so a prediction for 300 mm would be a guess.
+
+## Categorical predictors
+
+Species matters too. Add it with `+`:
+
+```{webr}
+m2 <- lm(body_mass_g ~ flipper_length_mm + species, data = penguins)
+tidy(m2)
+```
+
+R turns a categorical variable into comparisons with a **reference level**: the first level of the factor, here Adelie. So:
+
+- `speciesChinstrap` (about −207) means a Chinstrap is about 207 g lighter than an Adelie **with the same flipper length**.
+- `speciesGentoo` (about +267) means a Gentoo is about 267 g heavier than an Adelie with the same flipper length.
+- The flipper slope is now the effect of flipper length **within** a species.
+
+To compare with a different species, change the reference with `relevel()` or `fct_relevel()` from Day 11.
+
+`*` adds an **interaction**, which lets the slope differ between species:
+
+```{webr}
+m3 <- lm(body_mass_g ~ flipper_length_mm * species, data = penguins)
+tidy(m3)
+```
+
+## Checking the model: residuals
+
+A **residual** is the gap between the real value and the model's prediction. If the model fits well, residuals look like random noise around 0. Plot them against the fitted values:
+
+```{webr}
+augment(m2) |>
+  ggplot(aes(x = .fitted, y = .resid)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(x = "Fitted body mass (g)", y = "Residual (g)")
+```
+
+What to look for:
+
+- **A curve:** the relationship is not a straight line. Try a transformation such as `log()` or add a squared term with `I(x^2)`.
+- **A funnel** (spread grows with the fitted value): the error is not constant. A log of the outcome often helps.
+- **A few points far from the rest:** check them. They may be data entry errors.
+
+A Q-Q plot checks whether the residuals are roughly normal. Points should lie near the line:
+
+```{webr}
+augment(m2) |>
+  ggplot(aes(sample = .std.resid)) +
+  stat_qq() +
+  stat_qq_line()
+```
+
+Base R draws four diagnostic plots at once with `plot(m2)`. On your own computer, press Enter in the Console to see each one.
+
+## Comparing models
+
+Is `m2` better than `m1`? Three common ways to judge:
+
+```{webr}
+bind_rows(
+  glance(m1) |> mutate(model = "flipper only"),
+  glance(m2) |> mutate(model = "flipper + species")
+) |>
+  select(model, r.squared, adj.r.squared, AIC, BIC)
+```
+
+- **Adjusted R²** is R² with a penalty for each extra predictor. Higher is better.
+- **AIC** and **BIC** balance fit against complexity. Lower is better. Only compare them between models fitted to the **same rows**.
+- `anova()` tests whether the extra terms in a bigger model improve the fit:
+
+```{webr}
+anova(m1, m2)
+```
+
+The tiny p-value says adding species improves the model. Statistics alone should not choose your model, though. A predictor belongs in the model when there is a reason for it to be there.
+
+## Logistic regression: `glm()`
+
+`lm()` is for a numeric outcome. For a **yes/no** outcome, such as male or female, use logistic regression with `glm()` and `family = binomial`. It models the probability of the second level of the factor (here `male`, because `female` comes first alphabetically).
+
+```{webr}
+levels(penguins$sex)
+
+m_sex <- glm(sex ~ body_mass_g + species, family = binomial, data = penguins)
+tidy(m_sex)
+```
+
+The coefficients are on the **log-odds** scale, which is hard to read. `exponentiate = TRUE` turns them into **odds ratios**:
+
+```{webr}
+tidy(m_sex, exponentiate = TRUE, conf.int = TRUE)
+```
+
+The odds ratio for `body_mass_g` is about 1.0074: each extra gram multiplies the odds of being male by 1.0074. One gram is a small unit. Per 100 g, the odds ratio is `exp(100 * coef)`:
+
+```{webr}
+exp(100 * coef(m_sex)["body_mass_g"])
+```
+
+So within a species, each extra 100 g roughly doubles the odds that the penguin is male.
+
+Predicted **probabilities** come from `predict(..., type = "response")` or `augment(..., type.predict = "response")`:
+
+```{webr}
+new_penguins <- data.frame(body_mass_g = c(3500, 4500), species = "Adelie")
+predict(m_sex, newdata = new_penguins, type = "response")
+```
+
+A 3.5 kg Adelie is probably female, and a 4.5 kg Adelie is almost certainly male.
+
+## One model per group
+
+Day 12 showed you `nest()` and `map()`. Together with broom, they fit one model per group and collect the results in one table:
+
+```{webr}
+penguins |>
+  group_by(species) |>
+  nest() |>
+  mutate(
+    model = map(data, \(df) lm(body_mass_g ~ flipper_length_mm, data = df)),
+    coefs = map(model, tidy)
+  ) |>
+  unnest(coefs) |>
+  filter(term == "flipper_length_mm") |>
+  select(species, estimate, std.error, p.value)
+```
+
+Each species has its own slope. This is the same question as the interaction model `m3`, answered a different way.
+
+::: {.callout-tip}
+## Excel bridge
+Excel's `SLOPE()`, `INTERCEPT()` and `RSQ()` fit a line with one predictor, and the Analysis ToolPak's Regression tool gives a summary table. `lm()` does both, takes any number of predictors and categorical variables, and keeps the results as data you can reuse.
+:::
+
+## Exercises
+
+### Exercise 1: Fit a linear model
+
+Fit a linear model of `body_mass_g` against `bill_length_mm` using the `penguins` data. Save it as `m`.
+
+```{webr}
+#| exercise: ex14_lm
+#| setup: true
+library(palmerpenguins)
+```
+
+```{webr}
+#| exercise: ex14_lm
+m <- lm(______ ~ ______, data = penguins)
+m
+```
+
+::: {.hint exercise="ex14_lm"}
+::: {.callout-note collapse="false"}
+## Hint
+The outcome goes on the left of `~` and the predictor on the right: `body_mass_g ~ bill_length_mm`.
+:::
+:::
+
+::: {.solution exercise="ex14_lm"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+m <- lm(body_mass_g ~ bill_length_mm, data = penguins)
+m
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex14_lm
+#| check: true
+if (!exists("m") || !inherits(m, "lm")) {
+  list(correct = FALSE, message = "m should be a model fitted with lm().")
+} else if (identical(all.vars(formula(m)), c("bill_length_mm", "body_mass_g"))) {
+  list(correct = FALSE, message = "The variables are the wrong way round. Body mass is the outcome, so it goes on the left of ~.")
+} else if (identical(all.vars(formula(m)), c("body_mass_g", "bill_length_mm"))) {
+  list(correct = TRUE, message = paste0("Correct. Each extra mm of bill goes with about ", round(coef(m)[2]), " g more body mass."))
+} else {
+  list(correct = FALSE, message = "Use the formula body_mass_g ~ bill_length_mm.")
+}
+```
+
+### Exercise 2: Pull out a coefficient with `tidy()`
+
+Use `tidy()` from broom to turn `m1` into a data frame. Filter it to the `flipper_length_mm` row and pull out the `estimate` as a single number. Save it as `slope`.
+
+```{webr}
+#| exercise: ex14_tidy
+#| setup: true
+library(dplyr)
+library(palmerpenguins)
+library(broom)
+m1 <- lm(body_mass_g ~ flipper_length_mm, data = penguins)
+```
+
+```{webr}
+#| exercise: ex14_tidy
+slope <- tidy(m1) |>
+  filter(term == ______) |>
+  pull(______)
+slope
+```
+
+::: {.hint exercise="ex14_tidy"}
+::: {.callout-note collapse="false"}
+## Hint
+Run `tidy(m1)` first to see the column names. The term is `"flipper_length_mm"`, in quotes, and the column is `estimate`.
+:::
+:::
+
+::: {.solution exercise="ex14_tidy"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+slope <- tidy(m1) |>
+  filter(term == "flipper_length_mm") |>
+  pull(estimate)
+slope
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex14_tidy
+#| check: true
+target <- unname(coef(m1)["flipper_length_mm"])
+if (!exists("slope") || !is.numeric(slope)) {
+  list(correct = FALSE, message = "slope should be a number. Finish with pull(estimate).")
+} else if (length(slope) != 1) {
+  list(correct = FALSE, message = "slope should be one number. Filter to the flipper_length_mm row first.")
+} else if (isTRUE(all.equal(unname(slope), target))) {
+  list(correct = TRUE, message = "Correct: about 49.7 g per mm.")
+} else {
+  list(correct = FALSE, message = "That is not the flipper slope. Check the term name: \"flipper_length_mm\".")
+}
+```
+
+### Exercise 3: Compare two models
+
+Fit `m2`, which adds `species` to `m1`. Then use `glance()` to get the **adjusted R²** of each model and save them in a named vector `adj_r2` with the names `m1` and `m2`.
+
+```{webr}
+#| exercise: ex14_compare
+#| setup: true
+library(palmerpenguins)
+library(broom)
+m1 <- lm(body_mass_g ~ flipper_length_mm, data = penguins)
+```
+
+```{webr}
+#| exercise: ex14_compare
+m2 <- lm(body_mass_g ~ flipper_length_mm + ______, data = penguins)
+adj_r2 <- c(
+  m1 = glance(m1)$______,
+  m2 = glance(m2)$______
+)
+adj_r2
+```
+
+::: {.hint exercise="ex14_compare"}
+::: {.callout-note collapse="false"}
+## Hint
+Add `species` with `+`. Run `glance(m1)` to see its columns: the one you want is `adj.r.squared`.
+:::
+:::
+
+::: {.solution exercise="ex14_compare"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+m2 <- lm(body_mass_g ~ flipper_length_mm + species, data = penguins)
+adj_r2 <- c(
+  m1 = glance(m1)$adj.r.squared,
+  m2 = glance(m2)$adj.r.squared
+)
+adj_r2
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex14_compare
+#| check: true
+truth <- c(m1 = summary(m1)$adj.r.squared,
+           m2 = summary(lm(body_mass_g ~ flipper_length_mm + species, data = penguins))$adj.r.squared)
+if (!exists("m2") || !inherits(m2, "lm") || !"species" %in% all.vars(formula(m2))) {
+  list(correct = FALSE, message = "m2 should be lm(body_mass_g ~ flipper_length_mm + species, data = penguins).")
+} else if (!exists("adj_r2") || !identical(names(adj_r2), c("m1", "m2"))) {
+  list(correct = FALSE, message = "adj_r2 should be a vector with the names m1 and m2.")
+} else if (isTRUE(all.equal(adj_r2, truth))) {
+  list(correct = TRUE, message = "Correct. Adding species raises the adjusted R² from 0.758 to 0.781.")
+} else if (isTRUE(all.equal(unname(adj_r2), c(summary(m1)$r.squared, summary(m2)$r.squared)))) {
+  list(correct = FALSE, message = "These are the plain R² values. Use adj.r.squared.")
+} else {
+  list(correct = FALSE, message = "Use glance(m1)$adj.r.squared and glance(m2)$adj.r.squared.")
+}
+```
+
+### Exercise 4: Plot the residuals
+
+Use `augment()` on `m2` and draw the residuals (`.resid`) against the fitted values (`.fitted`) as points. Save the plot as `p`.
+
+```{webr}
+#| exercise: ex14_resid
+#| setup: true
+library(ggplot2)
+library(palmerpenguins)
+library(broom)
+m2 <- lm(body_mass_g ~ flipper_length_mm + species, data = penguins)
+```
+
+```{webr}
+#| exercise: ex14_resid
+p <- augment(m2) |>
+  ggplot(aes(x = ______, y = ______)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed")
+p
+```
+
+::: {.hint exercise="ex14_resid"}
+::: {.callout-note collapse="false"}
+## Hint
+The column names start with a full stop: `x = .fitted` and `y = .resid`.
+:::
+:::
+
+::: {.solution exercise="ex14_resid"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+p <- augment(m2) |>
+  ggplot(aes(x = .fitted, y = .resid)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed")
+p
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex14_resid
+#| check: true
+if (!exists("p") || !inherits(p, "ggplot")) {
+  list(correct = FALSE, message = "Save the plot as p.")
+} else {
+  x <- rlang::as_label(p$mapping$x)
+  y <- rlang::as_label(p$mapping$y)
+  has_points <- any(vapply(p$layers, \(l) inherits(l$geom, "GeomPoint"), logical(1)))
+  if (!identical(c(x, y), c(".fitted", ".resid"))) {
+    list(correct = FALSE, message = "Put .fitted on the x axis and .resid on the y axis.")
+  } else if (!has_points) {
+    list(correct = FALSE, message = "Add geom_point().")
+  } else {
+    list(correct = TRUE, message = "Correct. The points form a band around 0 with no clear curve, which is what you want to see.")
+  }
+}
+```
+
+### Exercise 5: A logistic regression
+
+Fit a logistic regression of `sex` against `bill_depth_mm` and `species`. Save it as `m_sex`. Then get the **predicted probability** that a Gentoo with a 15 mm bill depth is male, and save it as `prob`.
+
+```{webr}
+#| exercise: ex14_glm
+#| setup: true
+library(palmerpenguins)
+```
+
+```{webr}
+#| exercise: ex14_glm
+m_sex <- glm(sex ~ bill_depth_mm + species, family = ______, data = penguins)
+prob <- predict(
+  m_sex,
+  newdata = data.frame(bill_depth_mm = 15, species = "Gentoo"),
+  type = ______
+)
+prob
+```
+
+::: {.hint exercise="ex14_glm"}
+::: {.callout-note collapse="false"}
+## Hint
+A yes/no outcome uses `family = binomial`. To get a probability rather than log-odds, use `type = "response"`.
+:::
+:::
+
+::: {.solution exercise="ex14_glm"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+m_sex <- glm(sex ~ bill_depth_mm + species, family = binomial, data = penguins)
+prob <- predict(
+  m_sex,
+  newdata = data.frame(bill_depth_mm = 15, species = "Gentoo"),
+  type = "response"
+)
+prob
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex14_glm
+#| check: true
+truth <- glm(sex ~ bill_depth_mm + species, family = binomial, data = penguins)
+truth_p <- unname(predict(truth, newdata = data.frame(bill_depth_mm = 15, species = "Gentoo"), type = "response"))
+if (!exists("m_sex") || !inherits(m_sex, "glm")) {
+  list(correct = FALSE, message = "m_sex should be a model fitted with glm().")
+} else if (m_sex$family$family != "binomial") {
+  list(correct = FALSE, message = "Use family = binomial for a yes/no outcome.")
+} else if (!setequal(all.vars(formula(m_sex)), c("sex", "bill_depth_mm", "species"))) {
+  list(correct = FALSE, message = "Use the formula sex ~ bill_depth_mm + species.")
+} else if (!exists("prob") || !is.numeric(prob)) {
+  list(correct = FALSE, message = "Save the prediction as prob.")
+} else if (prob[1] < 0 || prob[1] > 1) {
+  list(correct = FALSE, message = "prob is outside 0 to 1, so it is on the log-odds scale. Add type = \"response\".")
+} else if (isTRUE(all.equal(unname(prob[1]), truth_p))) {
+  list(correct = TRUE, message = paste0("Correct: about ", round(100 * truth_p), "%. Bill depth helps separate males from females within a species."))
+} else {
+  list(correct = FALSE, message = "Predict for bill_depth_mm = 15 and species = \"Gentoo\", with type = \"response\".")
+}
+```
+
+## Your turn
+
+1. Does the relationship between bill length and bill depth change once you account for species? Fit `bill_depth_mm ~ bill_length_mm`, then `bill_depth_mm ~ bill_length_mm + species`. Compare the sign of the slope. (Look up "Simpson's paradox" afterwards.)
+2. Use `gapminder` (Day 6) to model `lifeExp` against `log(gdpPercap)` for 2007. Plot the residuals. Which countries have the largest residuals, and why might that be?
+3. For each penguin species, fit a logistic regression of `sex ~ body_mass_g`, and collect the odds ratios in one table with `nest()`, `map()` and `tidy(..., exponentiate = TRUE)`.
+
+```{webr}
+library(dplyr)
+library(ggplot2)
+library(palmerpenguins)
+library(broom)
+library(purrr)
+library(tidyr)
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Swapping the outcome and the predictor.** The outcome goes on the left of `~`.
+- **Reading the intercept as meaningful** when 0 is outside the data. Centre the predictor (for example `flipper_length_mm - 200`) if you need an interpretable intercept.
+- **Ignoring dropped rows.** `lm()` and `glm()` silently drop rows with missing values. Compare `nobs(model)` with the number of rows you expected.
+- **Reading logistic coefficients as probabilities.** They are log-odds. Use `exponentiate = TRUE` for odds ratios and `type = "response"` for probabilities.
+- **Comparing AIC between models fitted to different rows.** If one model uses a column with more missing values, the comparison is not fair. Drop the missing rows first.
+- **Treating a significant slope as proof of cause.** A regression shows an association. Cause needs a study design that supports it.
+
+## Summary
+
+- `lm(y ~ x, data = df)` fits a linear model. `+` adds predictors and `*` adds an interaction.
+- Categorical predictors are compared against a reference level.
+- broom's `tidy()`, `glance()` and `augment()` turn models into data frames.
+- Check models with a residuals-against-fitted plot and a Q-Q plot.
+- Compare models with adjusted R², AIC and `anova()`, and a reason for every predictor.
+- `glm(..., family = binomial)` fits a logistic regression. Exponentiate coefficients for odds ratios and use `type = "response"` for probabilities.
+- `nest()`, `map()` and `tidy()` fit one model per group.
+
+**Next:** on Day 15 you will turn your analysis into a reproducible report with Quarto.
+
+## Further reading
+
+- [Introduction to Modern Statistics (2e)](https://openintro-ims.netlify.app/), chapters 7 and 8 (linear regression) and chapter 9 (logistic regression), by Mine Çetinkaya-Rundel and Johanna Hardin. Free online.
+- [broom documentation](https://broom.tidymodels.org/).
+- [Tidy Modeling with R](https://www.tmwr.org/), by Max Kuhn and Julia Silge, for the next steps after `lm()`.

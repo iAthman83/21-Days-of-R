@@ -51,6 +51,13 @@ website:
           - lessons/day-09-control-flow.qmd
           - lessons/day-10-functions.qmd
           - lessons/day-11-strings-dates-factors.qmd
+      - section: "Level 3: Advanced"
+        contents:
+          - lessons/day-12-purrr.qmd
+          - lessons/day-13-regex.qmd
+          - lessons/day-14-modelling.qmd
+          - lessons/day-15-quarto-reports.qmd
+          - lessons/day-16-debugging.qmd
   page-footer:
     left: "© 2026 Abubakar Athman. Lessons CC BY 4.0, code MIT."
     right: "Built with [Quarto](https://quarto.org) and [webR](https://docs.r-wasm.org/webr/latest/)."
