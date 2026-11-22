@@ -1,0 +1,490 @@
+---
+title: "Day 7: Tidy data with tidyr"
+subtitle: "Reshape tables between wide and long, deal with missing values and join tables together"
+webr:
+  packages:
+    - dplyr
+    - tidyr
+    - gapminder
+  resources:
+    - ../data/household-survey.csv
+    - ../data/district-info.csv
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Intermediate · **Time:** about 2.5 hours · **Needs:** [Day 6](day-06-dplyr.qmd) · **Packages:** dplyr, tidyr, gapminder · **Data:** `data/household-survey.csv`, `data/district-info.csv`
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Explain what makes a dataset **tidy**.
+2. Reshape wide data to long with `pivot_longer()`, and long to wide with `pivot_wider()`.
+3. Split one column into several with `separate_wider_delim()`, and combine columns with `unite()`.
+4. Find, drop and replace missing values.
+5. Combine two tables with `left_join()`, `inner_join()` and `anti_join()`.
+
+```{webr}
+library(dplyr)
+library(tidyr)
+library(gapminder)
+```
+
+## What is tidy data?
+
+A dataset is **tidy** when:
+
+1. Each **variable** has its own column.
+2. Each **observation** has its own row.
+3. Each **value** has its own cell.
+
+Here is a table you might get from a spreadsheet. It shows maize harvested (in tonnes) per district and month:
+
+```{webr}
+harvest <- data.frame(
+  district = c("Gulu", "Arua", "Mbale"),
+  jan = c(120, 80, 150),
+  feb = c(95, 70, 160),
+  mar = c(140, 90, 175)
+)
+harvest
+```
+
+It is easy to read, but it is not tidy. "Month" is a variable, yet it is spread across three column names. To answer "what was the total harvest per month?" or to draw a line chart over time, you want one column for month and one for tonnes.
+
+::: {.callout-tip}
+## Excel bridge
+Spreadsheets are often **wide**, with one column per month or year, because that is easy to read. R's tools, including dplyr and ggplot2, work best with **long** data. Reshaping is the first step of many analyses.
+:::
+
+## Wide to long: `pivot_longer()`
+
+```{webr}
+harvest_long <- harvest |>
+  pivot_longer(
+    cols      = c(jan, feb, mar),  # the columns to stack
+    names_to  = "month",           # new column for the old column names
+    values_to = "tonnes"           # new column for the values
+  )
+harvest_long
+```
+
+Three rows of three months have become nine rows. Now the dplyr skills from Day 6 work directly:
+
+```{webr}
+harvest_long |>
+  group_by(month) |>
+  summarise(total = sum(tonnes))
+```
+
+You can also pick the columns with a helper, such as `cols = -district` ("every column except district").
+
+## Long to wide: `pivot_wider()`
+
+`pivot_wider()` does the reverse. It is useful for presenting results as a table. Here is life expectancy for three countries in long format, from the `gapminder` data:
+
+```{webr}
+life <- gapminder |>
+  filter(country %in% c("Uganda", "Kenya", "Rwanda"), year >= 1997) |>
+  select(country, year, lifeExp)
+life
+```
+
+```{webr}
+life |>
+  pivot_wider(names_from = year, values_from = lifeExp)
+```
+
+## Splitting and combining columns
+
+Sometimes one column holds two values, such as `"Gulu-2026"`. `separate_wider_delim()` splits it at a delimiter:
+
+```{webr}
+sites <- data.frame(site_code = c("Gulu-2026", "Arua-2025", "Mbale-2026"))
+sites |>
+  separate_wider_delim(site_code, delim = "-", names = c("district", "year"))
+```
+
+`unite()` does the opposite and pastes columns together:
+
+```{webr}
+data.frame(district = c("Gulu", "Arua"), year = c(2026, 2025)) |>
+  unite("site_code", district, year, sep = "-")
+```
+
+## Missing values
+
+Real data has gaps. tidyr has three tools for them:
+
+```{webr}
+hh <- read.csv("data/household-survey.csv")
+
+hh |> filter(is.na(monthly_income_ugx))                # see the rows with gaps
+hh |> drop_na(monthly_income_ugx) |> nrow()           # drop them
+hh |>
+  mutate(monthly_income_ugx = replace_na(monthly_income_ugx, 0)) |>
+  filter(household_id == "HH007")                      # replace NA with a value
+```
+
+::: {.callout-warning}
+## Think before you replace
+Replacing a missing income with 0 says "this household earns nothing", which is a different claim from "we do not know". Only replace `NA` when you know what the missing value means. Otherwise, drop the rows for that calculation and report how many you dropped.
+:::
+
+## Joining tables
+
+Data often lives in more than one table. The household survey records each household's district, and a second file records facts about each district:
+
+```{webr}
+districts <- read.csv("data/district-info.csv")
+districts
+```
+
+A **join** matches rows from two tables using a shared column, called the **key**. Here the key is `district`.
+
+### `left_join()`: keep every row of the first table
+
+```{webr}
+hh_joined <- hh |>
+  left_join(districts, by = "district")
+
+hh_joined |>
+  select(household_id, district, region, distance_to_market_km) |>
+  head(8)
+```
+
+Every household is kept. Households in **Hoima** get `NA` for `region`, because Hoima is not in `districts`. Kasese is in `districts` but has no households, so it does not appear.
+
+::: {.callout-tip}
+## Excel bridge
+`left_join()` does the job of `VLOOKUP()` or `XLOOKUP()`, for every column at once, and it never breaks when you insert a column.
+:::
+
+### Other joins
+
+```{webr}
+hh |> inner_join(districts, by = "district") |> nrow()   # only rows that match in both
+hh |> anti_join(districts, by = "district") |> count(district)  # rows in hh with NO match
+```
+
+`anti_join()` is a quick data-quality check: it shows the rows that failed to match, which often reveals spelling differences such as `"Gulu"` and `"gulu "`.
+
+::: {.callout-note}
+## Check the row count after every join
+If the key is repeated in the second table, a join can create more rows than you started with. Always compare `nrow()` before and after a join.
+:::
+
+## Exercises
+
+### Exercise 1: Wide to long
+
+The `scores` table has one column per test. Reshape it so that there is one row per student per test, with columns `student`, `test` and `score`. Save it as `scores_long`.
+
+```{webr}
+#| exercise: ex7_longer
+#| setup: true
+library(tidyr)
+scores <- data.frame(
+  student = c("Amina", "Brian", "Grace"),
+  test1 = c(78, 64, 90),
+  test2 = c(82, 70, 88),
+  test3 = c(85, 75, 94)
+)
+```
+
+```{webr}
+#| exercise: ex7_longer
+scores_long <- scores |>
+  pivot_longer(
+    cols      = ______,
+    names_to  = ______,
+    values_to = ______
+  )
+scores_long
+```
+
+::: {.hint exercise="ex7_longer"}
+::: {.callout-note collapse="false"}
+## Hint
+The columns to stack are `test1`, `test2` and `test3` (or "everything except `student`": `-student`). The new column names go in quotes: `"test"` and `"score"`.
+:::
+:::
+
+::: {.solution exercise="ex7_longer"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+scores_long <- scores |>
+  pivot_longer(
+    cols      = -student,
+    names_to  = "test",
+    values_to = "score"
+  )
+scores_long
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex7_longer
+#| check: true
+if (!exists("scores_long") || !is.data.frame(scores_long)) {
+  list(correct = FALSE, message = "Save the result as scores_long.")
+} else if (!identical(sort(names(scores_long)), c("score", "student", "test"))) {
+  list(correct = FALSE, message = "The columns should be student, test and score.")
+} else if (nrow(scores_long) != 9) {
+  list(correct = FALSE, message = "You should get 9 rows: 3 students times 3 tests.")
+} else if (isTRUE(all.equal(sum(scores_long$score), sum(scores[, -1])))) {
+  list(correct = TRUE, message = "Correct. 3 rows have become 9.")
+} else {
+  list(correct = FALSE, message = "Check which columns you stacked.")
+}
+```
+
+### Exercise 2: Long to wide
+
+Make a table of **population** for Uganda and Kenya, with one row per country and one column per year (2002 and 2007 only). Save it as `pop_wide`.
+
+```{webr}
+#| exercise: ex7_wider
+#| setup: true
+library(dplyr)
+library(tidyr)
+library(gapminder)
+pop <- gapminder |>
+  filter(country %in% c("Uganda", "Kenya"), year >= 2002) |>
+  select(country, year, pop)
+```
+
+```{webr}
+#| exercise: ex7_wider
+pop_wide <- pop |>
+  pivot_wider(names_from = ______, values_from = ______)
+pop_wide
+```
+
+::: {.hint exercise="ex7_wider"}
+::: {.callout-note collapse="false"}
+## Hint
+The new column names come from `year`. The values come from `pop`.
+:::
+:::
+
+::: {.solution exercise="ex7_wider"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+pop_wide <- pop |>
+  pivot_wider(names_from = year, values_from = pop)
+pop_wide
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex7_wider
+#| check: true
+if (!exists("pop_wide") || !is.data.frame(pop_wide)) {
+  list(correct = FALSE, message = "Save the result as pop_wide.")
+} else if (nrow(pop_wide) == 2 && all(c("country", "2002", "2007") %in% names(pop_wide))) {
+  list(correct = TRUE, message = "Correct: 2 rows, one column per year.")
+} else {
+  list(correct = FALSE, message = "You should get 2 rows with columns country, 2002 and 2007.")
+}
+```
+
+### Exercise 3: Drop missing values
+
+Remove the households with a missing `monthly_income_ugx`, then calculate the mean income of the rest. Save the cleaned data as `complete_hh`.
+
+```{webr}
+#| exercise: ex7_na
+#| setup: true
+library(dplyr)
+library(tidyr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex7_na
+complete_hh <- hh |>
+  ______(monthly_income_ugx)
+mean(complete_hh$monthly_income_ugx)
+```
+
+::: {.hint exercise="ex7_na"}
+::: {.callout-note collapse="false"}
+## Hint
+The tidyr function that removes rows with missing values starts with `drop`.
+:::
+:::
+
+::: {.solution exercise="ex7_na"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+complete_hh <- hh |>
+  drop_na(monthly_income_ugx)
+mean(complete_hh$monthly_income_ugx)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex7_na
+#| check: true
+if (!exists("complete_hh") || !is.data.frame(complete_hh)) {
+  list(correct = FALSE, message = "Save the cleaned data as complete_hh.")
+} else if (nrow(complete_hh) == 37 && !anyNA(complete_hh$monthly_income_ugx)) {
+  list(correct = TRUE, message = "Correct: 37 households remain after dropping 3.")
+} else {
+  list(correct = FALSE, message = "You should have 37 rows with no missing incomes. Use drop_na(monthly_income_ugx).")
+}
+```
+
+### Exercise 4: Left join
+
+Add the district information to every household. Keep **all** households, even those with no match. Save the result as `hh_joined`.
+
+```{webr}
+#| exercise: ex7_join
+#| setup: true
+library(dplyr)
+hh <- read.csv("data/household-survey.csv")
+districts <- read.csv("data/district-info.csv")
+```
+
+```{webr}
+#| exercise: ex7_join
+hh_joined <- hh |>
+  ______(districts, by = ______)
+hh_joined |> select(household_id, district, region)
+```
+
+::: {.hint exercise="ex7_join"}
+::: {.callout-note collapse="false"}
+## Hint
+The join that keeps every row of the first table is `left_join()`. The key column is `"district"`, in quotes.
+:::
+:::
+
+::: {.solution exercise="ex7_join"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+hh_joined <- hh |>
+  left_join(districts, by = "district")
+hh_joined |> select(household_id, district, region)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex7_join
+#| check: true
+if (!exists("hh_joined") || !is.data.frame(hh_joined)) {
+  list(correct = FALSE, message = "Save the result as hh_joined.")
+} else if (!"region" %in% names(hh_joined)) {
+  list(correct = FALSE, message = "hh_joined should have a region column from districts.")
+} else if (nrow(hh_joined) < 40) {
+  list(correct = FALSE, message = "Some households are missing. inner_join() drops rows with no match: use left_join().")
+} else if (nrow(hh_joined) == 40) {
+  list(correct = TRUE, message = "Correct. All 40 households are kept, and Hoima households have NA for region.")
+} else {
+  list(correct = FALSE, message = "You should have exactly 40 rows.")
+}
+```
+
+### Exercise 5: Find unmatched rows
+
+Which district in the survey has **no** entry in `districts`? Use a join that returns only the unmatched households, then `count()` them by district. Save the result as `unmatched`.
+
+```{webr}
+#| exercise: ex7_anti
+#| setup: true
+library(dplyr)
+hh <- read.csv("data/household-survey.csv")
+districts <- read.csv("data/district-info.csv")
+```
+
+```{webr}
+#| exercise: ex7_anti
+unmatched <- hh |>
+  ______(districts, by = "district") |>
+  count(district)
+unmatched
+```
+
+::: {.hint exercise="ex7_anti"}
+::: {.callout-note collapse="false"}
+## Hint
+The join that keeps only rows with no match is `anti_join()`.
+:::
+:::
+
+::: {.solution exercise="ex7_anti"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+unmatched <- hh |>
+  anti_join(districts, by = "district") |>
+  count(district)
+unmatched
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex7_anti
+#| check: true
+if (!exists("unmatched") || !"district" %in% names(unmatched)) {
+  list(correct = FALSE, message = "Save the counted result as unmatched.")
+} else if (identical(as.character(unmatched$district), "Hoima")) {
+  list(correct = TRUE, message = sprintf("Correct: Hoima, with %d households.", unmatched$n))
+} else {
+  list(correct = FALSE, message = "You should get only Hoima. Use anti_join().")
+}
+```
+
+## Your turn
+
+1. Reshape `harvest` to long, then find the month with the largest total harvest.
+2. Using `gapminder`, make a wide table of GDP per capita (`gdpPercap`) for five countries of your choice, with one column per decade (1957, 1967, 1977, 1987, 1997, 2007).
+3. Join the household survey to `districts`, then calculate the average distance to market for households with and without water. Which households did you have to leave out, and why?
+
+```{webr}
+library(dplyr)
+library(tidyr)
+library(gapminder)
+hh <- read.csv("data/household-survey.csv")
+districts <- read.csv("data/district-info.csv")
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Forgetting the quotes in `names_to` and `values_to`.** They name new columns, so write them as text: `names_to = "month"`.
+- **Joining on the wrong key, or forgetting `by`.** Without `by`, dplyr joins on every column with the same name and prints a message. Always set `by` yourself.
+- **Not checking row counts after a join.** A repeated key in the second table multiplies rows.
+- **Replacing `NA` with 0 by habit.** "Unknown" and "zero" are different. Decide on purpose.
+- **Spelling differences in keys.** `"Gulu"` and `"gulu"` do not match. Use `anti_join()` to find them.
+
+## Summary
+
+- Tidy data has one variable per column, one observation per row and one value per cell.
+- `pivot_longer()` turns wide data long. `pivot_wider()` turns long data wide.
+- `separate_wider_delim()` splits a column, and `unite()` combines columns.
+- `drop_na()` removes rows with missing values. `replace_na()` fills them in, which you should only do on purpose.
+- `left_join()` keeps every row of the first table, `inner_join()` keeps only matches and `anti_join()` shows rows with no match.
+
+**Tomorrow:** you will turn your tidy data into charts with ggplot2.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 5: Data tidying](https://r4ds.hadley.nz/data-tidy).
+- [R for Data Science (2e), chapter 19: Joins](https://r4ds.hadley.nz/joins).
+- [tidyr documentation](https://tidyr.tidyverse.org/).

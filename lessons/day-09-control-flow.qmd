@@ -1,0 +1,508 @@
+---
+title: "Day 9: Control flow"
+subtitle: "Write code that makes decisions with if, if_else() and case_when(), and repeats steps with loops"
+webr:
+  packages:
+    - dplyr
+  resources:
+    - ../data/household-survey.csv
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Intermediate · **Time:** about 2 hours · **Needs:** [Day 6](day-06-dplyr.qmd) · **Packages:** dplyr · **Data:** `data/household-survey.csv`
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Run code only when a condition is true, with `if`, `else if` and `else`.
+2. Tell the difference between `if` (one value) and `if_else()` (a whole column).
+3. Create categories from conditions with `case_when()`.
+4. Repeat steps with a `for` loop, and store the results properly.
+5. Use a `while` loop when you do not know in advance how many steps you need.
+
+```{webr}
+library(dplyr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+## `if`: making one decision
+
+`if` runs a block of code only when a condition is `TRUE`. The code to run goes inside curly brackets `{ }`:
+
+```{webr}
+rainfall_mm <- 42
+
+if (rainfall_mm < 50) {
+  print("Dry month: check water points")
+}
+```
+
+Add `else` for what to do when the condition is `FALSE`, and `else if` for more choices. R checks the conditions in order and runs the first one that is `TRUE`:
+
+```{webr}
+rainfall_mm <- 130
+
+if (rainfall_mm < 50) {
+  status <- "dry"
+} else if (rainfall_mm < 150) {
+  status <- "normal"
+} else {
+  status <- "wet"
+}
+status
+```
+
+Change `rainfall_mm` to 20 and to 200, and run it again.
+
+### `if` needs exactly one TRUE or FALSE
+
+`if` makes one decision. If you give it a whole vector, R stops with an error:
+
+```{webr}
+sizes <- c(3, 8, 5)
+if (sizes > 4) print("large") # Error expected: if() needs a single value
+```
+
+To make a decision for **every** value in a vector or column, use `if_else()` or `case_when()`.
+
+## `if_else()`: one decision per value
+
+`if_else()` from dplyr checks a condition for every value and returns one result where it is `TRUE` and another where it is `FALSE`:
+
+```{webr}
+sizes <- c(3, 8, 5)
+if_else(sizes > 4, "large", "small")
+```
+
+It is most useful inside `mutate()`:
+
+```{webr}
+hh |>
+  mutate(water = if_else(has_water == "yes", "Has water", "No water")) |>
+  select(household_id, has_water, water) |>
+  head()
+```
+
+`if_else()` is the dplyr version of base R's `ifelse()`, which you met on Day 4. It is stricter: both results must be the same type. That catches mistakes early.
+
+::: {.callout-tip}
+## Excel bridge
+`if_else(condition, yes, no)` works like Excel's `=IF(condition, yes, no)`, filled down a whole column.
+:::
+
+## `case_when()`: many categories
+
+Nested `if_else()` calls quickly become unreadable. `case_when()` lists conditions and results as `condition ~ result`, checked from top to bottom:
+
+```{webr}
+hh |>
+  mutate(
+    income_band = case_when(
+      monthly_income_ugx <  200000 ~ "low",
+      monthly_income_ugx <  600000 ~ "middle",
+      monthly_income_ugx >= 600000 ~ "high",
+      .default = "unknown"
+    )
+  ) |>
+  count(income_band)
+```
+
+- Each row gets the result of the **first** condition that is `TRUE`. That is why the second line only needs `< 600000`: incomes under 200,000 were already caught by the first line.
+- `.default` is used when no condition is `TRUE`. Here, that is the households with a missing income, because `NA < 200000` is `NA`, not `TRUE`.
+
+::: {.callout-tip}
+## Excel bridge
+`case_when()` replaces long nested formulas such as `=IF(A2<200000,"low",IF(A2<600000,"middle","high"))`, or Excel's `IFS()`.
+:::
+
+## `for` loops: repeat for each value
+
+A `for` loop runs the same code once for each value in a vector:
+
+```{webr}
+for (district in c("Gulu", "Arua", "Mbale")) {
+  print(paste("Preparing report for", district))
+}
+```
+
+Each time round, `district` takes the next value.
+
+### Storing results from a loop
+
+To keep the results, create an empty vector of the right length **before** the loop, then fill it in. Loop over positions with `seq_along()`:
+
+```{webr}
+districts <- unique(hh$district)
+mean_size <- numeric(length(districts))   # an empty numeric vector
+
+for (i in seq_along(districts)) {
+  rows <- hh$district == districts[i]
+  mean_size[i] <- mean(hh$household_size[rows])
+}
+
+data.frame(district = districts, mean_size = mean_size)
+```
+
+`seq_along(districts)` gives `1, 2, 3, 4`: one number for each position.
+
+::: {.callout-note}
+## Do you need a loop?
+In R, many jobs that need a loop in other languages are done without one. The loop above is the same as this dplyr pipeline:
+
+```r
+hh |> group_by(district) |> summarise(mean_size = mean(household_size))
+```
+
+Vectorised code and dplyr are shorter and usually faster. Loops are still the right tool for jobs such as reading many files, or running a step that depends on the previous one. On Day 12 you will learn `purrr::map()`, a tidier way to loop.
+:::
+
+## `while` loops: repeat until a condition changes
+
+A `while` loop keeps going as long as its condition is `TRUE`. Use it when you do not know how many steps you need:
+
+```{webr}
+savings <- 100000
+months  <- 0
+
+while (savings < 500000) {
+  savings <- savings * 1.1   # grows 10% a month
+  months  <- months + 1
+}
+months
+```
+
+::: {.callout-warning}
+## Avoid infinite loops
+Something inside a `while` loop must eventually make the condition `FALSE`. If not, the loop never ends. In RStudio, press **Esc** to stop it. In this browser, refresh the page.
+:::
+
+`break` leaves a loop early, and `next` skips to the next value:
+
+```{webr}
+for (x in 1:10) {
+  if (x %% 2 == 0) next   # skip even numbers
+  if (x > 7) break        # stop after 7
+  print(x)
+}
+```
+
+## Exercises
+
+### Exercise 1: if and else
+
+Write an `if`/`else` block that gives `"pass"` if `score` is **50 or more**, and `"fail"` otherwise. The last value of your code should be the result.
+
+```{webr}
+#| exercise: ex9_if
+#| setup: true
+score <- 64
+```
+
+```{webr}
+#| exercise: ex9_if
+if (______) {
+  "pass"
+} else {
+  ______
+}
+```
+
+::: {.hint exercise="ex9_if"}
+::: {.callout-note collapse="false"}
+## Hint
+The condition is `score >= 50`. The `else` block should give the text `"fail"`.
+:::
+:::
+
+::: {.solution exercise="ex9_if"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+if (score >= 50) {
+  "pass"
+} else {
+  "fail"
+}
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex9_if
+#| check: true
+if (identical(.result, "pass")) {
+  list(correct = TRUE, message = "Correct. Try changing score to 45 in the setup to see the other branch.")
+} else if (identical(.result, "fail")) {
+  list(correct = FALSE, message = "score is 64, so the result should be \"pass\". Check the condition: >= 50.")
+} else {
+  list(correct = FALSE, message = "Your code should give \"pass\" or \"fail\".")
+}
+```
+
+### Exercise 2: if_else() in a column
+
+Add a column `large` to the survey that is `"yes"` when `household_size` is **6 or more** and `"no"` otherwise. Save the result as `hh2`.
+
+```{webr}
+#| exercise: ex9_ifelse
+#| setup: true
+library(dplyr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex9_ifelse
+hh2 <- hh |>
+  mutate(large = if_else(______, ______, ______))
+hh2 |> count(large)
+```
+
+::: {.hint exercise="ex9_ifelse"}
+::: {.callout-note collapse="false"}
+## Hint
+`if_else()` takes three arguments: the condition (`household_size >= 6`), the value when it is `TRUE` and the value when it is `FALSE`.
+:::
+:::
+
+::: {.solution exercise="ex9_ifelse"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+hh2 <- hh |>
+  mutate(large = if_else(household_size >= 6, "yes", "no"))
+hh2 |> count(large)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex9_ifelse
+#| check: true
+expected <- ifelse(hh$household_size >= 6, "yes", "no")
+if (!exists("hh2") || !"large" %in% names(hh2)) {
+  list(correct = FALSE, message = "hh2 needs a new column called large.")
+} else if (identical(as.character(hh2$large), expected)) {
+  list(correct = TRUE, message = sprintf("Correct: %d large households.", sum(expected == "yes")))
+} else if (identical(as.character(hh2$large), ifelse(hh$household_size > 6, "yes", "no"))) {
+  list(correct = FALSE, message = "6 or more means >= 6, not > 6.")
+} else {
+  list(correct = FALSE, message = "large should be \"yes\" when household_size >= 6, otherwise \"no\".")
+}
+```
+
+### Exercise 3: case_when()
+
+Add a column `size_group` with three categories:
+
+- `"small"` for 1 to 3 people
+- `"medium"` for 4 to 6 people
+- `"large"` for 7 or more
+
+Save the result as `hh3`.
+
+```{webr}
+#| exercise: ex9_case
+#| setup: true
+library(dplyr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex9_case
+hh3 <- hh |>
+  mutate(
+    size_group = case_when(
+      household_size <= 3 ~ "small",
+      ______ ~ "medium",
+      ______ ~ "large"
+    )
+  )
+hh3 |> count(size_group)
+```
+
+::: {.hint exercise="ex9_case"}
+::: {.callout-note collapse="false"}
+## Hint
+Conditions are checked from top to bottom, so the second one only needs `household_size <= 6`. The last can be `household_size >= 7`.
+:::
+:::
+
+::: {.solution exercise="ex9_case"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+hh3 <- hh |>
+  mutate(
+    size_group = case_when(
+      household_size <= 3 ~ "small",
+      household_size <= 6 ~ "medium",
+      household_size >= 7 ~ "large"
+    )
+  )
+hh3 |> count(size_group)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex9_case
+#| check: true
+expected <- ifelse(hh$household_size <= 3, "small", ifelse(hh$household_size <= 6, "medium", "large"))
+if (!exists("hh3") || !"size_group" %in% names(hh3)) {
+  list(correct = FALSE, message = "hh3 needs a new column called size_group.")
+} else if (anyNA(hh3$size_group)) {
+  list(correct = FALSE, message = "Some rows have NA in size_group, so a size is not covered by any condition.")
+} else if (identical(as.character(hh3$size_group), expected)) {
+  list(correct = TRUE, message = "Correct.")
+} else {
+  list(correct = FALSE, message = "Check the boundaries: 1-3 small, 4-6 medium, 7 or more large.")
+}
+```
+
+### Exercise 4: A for loop that stores results
+
+For each value in `prices`, calculate the price with 18% VAT added (`price * 1.18`) and store it in `with_vat`. The empty vector is created for you.
+
+```{webr}
+#| exercise: ex9_for
+#| setup: true
+prices <- c(2500, 800, 12000, 4500)
+```
+
+```{webr}
+#| exercise: ex9_for
+with_vat <- numeric(length(prices))
+
+for (i in ______) {
+  with_vat[i] <- ______
+}
+with_vat
+```
+
+::: {.hint exercise="ex9_for"}
+::: {.callout-note collapse="false"}
+## Hint
+Loop over `seq_along(prices)`. Inside the loop, the current price is `prices[i]`.
+:::
+:::
+
+::: {.solution exercise="ex9_for"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+with_vat <- numeric(length(prices))
+
+for (i in seq_along(prices)) {
+  with_vat[i] <- prices[i] * 1.18
+}
+with_vat
+```
+In real code you would write `prices * 1.18`, which does the same in one step. The loop here is for practice.
+:::
+:::
+
+```{webr}
+#| exercise: ex9_for
+#| check: true
+if (!exists("with_vat")) {
+  list(correct = FALSE, message = "Keep the line that creates with_vat.")
+} else if (isTRUE(all.equal(with_vat, prices * 1.18))) {
+  list(correct = TRUE, message = "Correct. Every value was filled in.")
+} else if (any(with_vat == 0)) {
+  list(correct = FALSE, message = "Some values are still 0. Loop over every position with seq_along(prices).")
+} else {
+  list(correct = FALSE, message = "Each value should be prices[i] * 1.18.")
+}
+```
+
+### Exercise 5: A while loop
+
+A district has 12,000 people, and its population grows by **3% a year**. Use a `while` loop to find how many years it takes to reach **at least 15,000** people. The last value should be `years`.
+
+```{webr}
+#| exercise: ex9_while
+population <- 12000
+years <- 0
+
+while (______) {
+  population <- ______
+  years <- years + 1
+}
+years
+```
+
+::: {.hint exercise="ex9_while"}
+::: {.callout-note collapse="false"}
+## Hint
+Keep looping while `population < 15000`. Each year, the population is multiplied by `1.03`.
+:::
+:::
+
+::: {.solution exercise="ex9_while"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+population <- 12000
+years <- 0
+
+while (population < 15000) {
+  population <- population * 1.03
+  years <- years + 1
+}
+years
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex9_while
+#| check: true
+if (isTRUE(all.equal(.result, 8))) {
+  list(correct = TRUE, message = "Correct: 8 years.")
+} else if (isTRUE(all.equal(.result, 7))) {
+  list(correct = FALSE, message = "Close. After 7 years the population is still just below 15,000. Check your condition.")
+} else {
+  list(correct = FALSE, message = "Loop while population < 15000, and multiply population by 1.03 each time.")
+}
+```
+
+## Your turn
+
+1. Write an `if`/`else if`/`else` block that turns a temperature in Celsius into `"cold"` (below 15), `"warm"` (15 to 28) or `"hot"` (above 28).
+2. In the survey, use `case_when()` to label each household `"priority"` if it has no water **and** 6 or more people, and `"standard"` otherwise. How many priority households are there?
+3. Write a `for` loop that prints one line per district: "Gulu: 11 households", and so on. Then do the same with `count()`.
+
+```{webr}
+library(dplyr)
+hh <- read.csv("data/household-survey.csv")
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Giving `if` a whole vector.** `if` needs one `TRUE` or `FALSE`. Use `if_else()` or `case_when()` for columns.
+- **Putting `else` on a new line.** At the top level, R reads `}` as the end of the `if`. Write `} else {` on one line.
+- **Wrong order in `case_when()`.** The first `TRUE` condition wins. Put the most specific conditions first.
+- **Forgetting about `NA`.** A condition that is `NA` is not `TRUE`, so `case_when()` returns `NA` unless you set `.default`.
+- **Growing a vector inside a loop.** `results <- c(results, x)` is slow on large data. Create the vector first with `numeric(n)`, then fill it.
+
+## Summary
+
+- `if`, `else if` and `else` make one decision based on one `TRUE` or `FALSE`.
+- `if_else()` makes a decision for every value. It is ideal inside `mutate()`.
+- `case_when()` turns several conditions into categories, checked from top to bottom.
+- `for` loops repeat code for each value. Create the result vector first, then fill it with `[i]`.
+- `while` loops repeat until a condition becomes `FALSE`.
+
+**Tomorrow:** you will write your own functions, so you can reuse code instead of copying it.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 12: Logical vectors](https://r4ds.hadley.nz/logicals) (covers `if_else()` and `case_when()`).
+- [Hands-On Programming with R, chapter 9: Programs](https://rstudio-education.github.io/hopr/programs.html) (`if` and `else`).
+- [Advanced R (2e), chapter 5: Control flow](https://adv-r.hadley.nz/control-flow.html).

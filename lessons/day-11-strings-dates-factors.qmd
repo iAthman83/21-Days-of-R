@@ -1,0 +1,503 @@
+---
+title: "Day 11: Strings, dates and factors"
+subtitle: "Clean messy text with stringr, calculate with dates in lubridate and control categories with forcats"
+webr:
+  packages:
+    - dplyr
+    - stringr
+    - lubridate
+    - forcats
+    - ggplot2
+  resources:
+    - ../data/household-survey.csv
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Intermediate · **Time:** about 2.5 hours · **Needs:** [Day 7](day-07-tidyr.qmd) and [Day 8](day-08-ggplot2.qmd) · **Packages:** stringr, lubridate, forcats, dplyr, ggplot2 · **Data:** `data/household-survey.csv`
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Clean text: fix case, remove extra spaces and replace parts of strings.
+2. Detect, count and extract text that matches a pattern.
+3. Turn text into dates, and pull out the year, month or weekday.
+4. Calculate the time between two dates.
+5. Reorder, relabel and group factor levels, so tables and charts appear in a sensible order.
+
+```{webr}
+library(dplyr)
+library(stringr)
+library(lubridate)
+library(forcats)
+library(ggplot2)
+hh <- read.csv("data/household-survey.csv")
+```
+
+## Part 1: Strings with stringr
+
+Text typed by people is messy. Here are village names as they arrived from a form:
+
+```{webr}
+villages <- c("  pader camp", "PADER CAMP ", "Pader  Camp", "awach", "Awach Trading Centre")
+villages
+unique(villages)
+```
+
+The first three are the same place, but R sees three different values. Every function in **stringr** starts with `str_`, takes the text first and works on whole vectors.
+
+### Fixing case and spaces
+
+```{webr}
+str_to_lower(villages)
+str_to_title(villages)
+str_trim(villages)           # remove spaces at the start and end
+str_squish(villages)         # also turn repeated spaces inside into one
+```
+
+Combine them to standardise the names:
+
+```{webr}
+clean <- villages |> str_squish() |> str_to_title()
+clean
+unique(clean)
+```
+
+Five spellings are now three places.
+
+### Length, slicing and joining
+
+```{webr}
+str_length("Kampala")
+str_sub("HH001", start = 3, end = 5)     # characters 3 to 5
+str_c("HH", "001")                       # join strings
+str_c("District: ", c("Gulu", "Arua"))
+str_pad(c(1, 25, 300), width = 3, pad = "0")   # "001", "025", "300"
+```
+
+### Detecting and replacing patterns
+
+`str_detect()` returns `TRUE` or `FALSE` for each value, so it works inside `filter()`:
+
+```{webr}
+str_detect(clean, "Camp")
+sum(str_detect(clean, "Camp"))
+```
+
+`str_replace()` replaces the first match, and `str_replace_all()` replaces every match:
+
+```{webr}
+str_replace(clean, "Trading Centre", "TC")
+str_replace_all("UGX 1,250,000", ",", "")
+```
+
+The patterns above are plain text. stringr also understands **regular expressions**, a mini-language for patterns such as "any digit" or "a word at the start". You will learn them properly on Day 13. One useful example for now: `\\d+` means "one or more digits".
+
+```{webr}
+str_extract("Plot 47, Block 3", "\\d+")
+str_extract_all("Plot 47, Block 3", "\\d+")
+```
+
+::: {.callout-tip}
+## Excel bridge
+`str_to_upper()`, `str_trim()`, `str_sub()`, `str_c()` and `str_replace()` match Excel's `UPPER()`, `TRIM()`, `MID()`, `CONCAT()` and `SUBSTITUTE()`. The difference: one line cleans the whole column.
+:::
+
+## Part 2: Dates with lubridate
+
+On Day 5 you saw that `read.csv()` reads dates as text. Text cannot be sorted by time or subtracted. **lubridate** turns text into real dates.
+
+### Parsing dates
+
+Choose the function that matches the order of the parts: `y` for year, `m` for month and `d` for day.
+
+```{webr}
+ymd("2026-03-15")
+dmy("15/03/2026")
+mdy("March 15, 2026")
+dmy(c("01-04-2026", "1 April 2026", "01.04.26"))   # many formats, one function
+```
+
+::: {.callout-warning}
+## Day first or month first?
+`"04/03/2026"` is 4 March in Uganda and the UK, but 3 April in the United States. Always check which order your data uses, and test a date where the day is above 12.
+:::
+
+### Pulling out parts
+
+```{webr}
+d <- ymd("2026-03-15")
+year(d)
+month(d)
+month(d, label = TRUE)
+day(d)
+wday(d, label = TRUE)    # day of the week
+```
+
+### Calculating with dates
+
+Subtracting two dates gives the number of days between them:
+
+```{webr}
+ymd("2026-04-01") - ymd("2026-03-15")
+as.numeric(ymd("2026-04-01") - ymd("2026-03-15"))
+ymd("2026-03-15") + days(30)
+ymd("2026-03-15") + months(2)
+```
+
+`floor_date()` rounds dates down to the start of a week or month, which is useful for grouping:
+
+```{webr}
+floor_date(ymd("2026-03-18"), "week", week_start = 1)   # the Monday of that week
+floor_date(ymd("2026-03-18"), "month")
+```
+
+### Dates in a data frame
+
+```{webr}
+hh_dates <- hh |>
+  mutate(
+    date    = ymd(interview_date),
+    week    = floor_date(date, "week", week_start = 1),
+    weekday = wday(date, label = TRUE)
+  )
+
+hh_dates |> count(week)
+```
+
+Now you can count interviews per week, find the first and last interview with `min()` and `max()`, or plot progress over time.
+
+## Part 3: Factors with forcats
+
+On Day 2 you met factors: categories with a fixed set of levels. Factors control the **order** in which categories appear in tables and charts. By default, R sorts text alphabetically, which is rarely the order you want.
+
+```{webr}
+answers <- c("Agree", "Disagree", "Neutral", "Agree", "Strongly agree", "Agree")
+factor(answers)   # alphabetical: Agree, Disagree, Neutral, Strongly agree
+```
+
+### Setting the order yourself: `fct_relevel()`
+
+```{webr}
+likert <- fct_relevel(answers, "Disagree", "Neutral", "Agree", "Strongly agree")
+levels(likert)
+table(likert)
+```
+
+### Ordering by frequency: `fct_infreq()`
+
+Bar charts are easier to read when bars are sorted:
+
+```{webr}
+hh |>
+  mutate(main_crop = fct_infreq(main_crop)) |>
+  ggplot(aes(x = main_crop)) +
+  geom_bar() +
+  labs(x = "Main crop", y = "Households")
+```
+
+### Other useful forcats functions
+
+```{webr}
+fct_recode(factor(hh$has_water), "Has water" = "yes", "No water" = "no") |> table()
+fct_lump_n(factor(hh$main_crop), n = 2) |> table()   # keep the 2 most common, lump the rest as "Other"
+fct_rev(factor(c("low", "middle", "high"), levels = c("low", "middle", "high"))) |> levels()
+```
+
+## Exercises
+
+### Exercise 1: Clean text
+
+Clean the district names so that each one has no extra spaces and is in title case (for example `"Gulu"`). Save the result as `clean_districts`.
+
+```{webr}
+#| exercise: ex11_clean
+#| setup: true
+library(stringr)
+messy <- c(" gulu", "GULU ", "arua", "  Arua  ", "mbale")
+```
+
+```{webr}
+#| exercise: ex11_clean
+clean_districts <- messy |>
+  ______() |>
+  ______()
+clean_districts
+```
+
+::: {.hint exercise="ex11_clean"}
+::: {.callout-note collapse="false"}
+## Hint
+`str_squish()` removes extra spaces and `str_to_title()` fixes the case.
+:::
+:::
+
+::: {.solution exercise="ex11_clean"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+clean_districts <- messy |>
+  str_squish() |>
+  str_to_title()
+clean_districts
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex11_clean
+#| check: true
+if (!exists("clean_districts")) {
+  list(correct = FALSE, message = "Save the result as clean_districts.")
+} else if (identical(clean_districts, c("Gulu", "Gulu", "Arua", "Arua", "Mbale"))) {
+  list(correct = TRUE, message = "Correct. Five spellings are now three districts.")
+} else if (any(str_detect(clean_districts, "^ | $"))) {
+  list(correct = FALSE, message = "Some names still have spaces. Use str_squish() or str_trim().")
+} else {
+  list(correct = FALSE, message = "Names should be in title case, like \"Gulu\". Use str_to_title().")
+}
+```
+
+### Exercise 2: Detect a pattern
+
+How many of these settlement names contain the word `"Camp"`? Use `str_detect()` inside `sum()`.
+
+```{webr}
+#| exercise: ex11_detect
+#| setup: true
+library(stringr)
+places <- c("Pader Camp", "Awach", "Unyama Camp", "Gulu Town", "Pabbo Camp", "Lacor")
+```
+
+```{webr}
+#| exercise: ex11_detect
+sum(str_detect(______, ______))
+```
+
+::: {.hint exercise="ex11_detect"}
+::: {.callout-note collapse="false"}
+## Hint
+The first argument is the text (`places`) and the second is the pattern, in quotes.
+:::
+:::
+
+::: {.solution exercise="ex11_detect"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+sum(str_detect(places, "Camp"))
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex11_detect
+#| check: true
+if (identical(as.integer(.result), 3L)) {
+  list(correct = TRUE, message = "Correct: 3 names contain \"Camp\".")
+} else if (identical(as.integer(.result), 0L)) {
+  list(correct = FALSE, message = "Patterns are case-sensitive. Use \"Camp\" with a capital C.")
+} else {
+  list(correct = FALSE, message = "Use sum(str_detect(places, \"Camp\")).")
+}
+```
+
+### Exercise 3: Parse dates
+
+These dates are written day first, as `"15/03/2026"`. Convert them to real dates and save the result as `dates`.
+
+```{webr}
+#| exercise: ex11_parse
+#| setup: true
+library(lubridate)
+raw_dates <- c("15/03/2026", "02/04/2026", "28/02/2026")
+```
+
+```{webr}
+#| exercise: ex11_parse
+dates <- ______(raw_dates)
+dates
+```
+
+::: {.hint exercise="ex11_parse"}
+::: {.callout-note collapse="false"}
+## Hint
+The order is day, month, year, so the function is `dmy()`.
+:::
+:::
+
+::: {.solution exercise="ex11_parse"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+dates <- dmy(raw_dates)
+dates
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex11_parse
+#| check: true
+if (!exists("dates") || !inherits(dates, "Date")) {
+  list(correct = FALSE, message = "dates should be a Date vector. Use a lubridate function such as dmy().")
+} else if (anyNA(dates)) {
+  list(correct = FALSE, message = "Some dates became NA. Check the order: day, month, year.")
+} else if (identical(dates, as.Date(c("2026-03-15", "2026-04-02", "2026-02-28")))) {
+  list(correct = TRUE, message = "Correct.")
+} else {
+  list(correct = FALSE, message = "The dates are in the wrong order. These are day first: use dmy().")
+}
+```
+
+### Exercise 4: Calculate with dates
+
+Add two columns to the survey: `date`, the interview date as a real date, and `days_to_deadline`, the number of days from the interview to the reporting deadline on **2026-04-10** (as a number). Save the result as `hh2`.
+
+```{webr}
+#| exercise: ex11_days
+#| setup: true
+library(dplyr)
+library(lubridate)
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex11_days
+hh2 <- hh |>
+  mutate(
+    date             = ______(interview_date),
+    days_to_deadline = as.numeric(______ - date)
+  )
+hh2 |> select(household_id, date, days_to_deadline) |> head()
+```
+
+::: {.hint exercise="ex11_days"}
+::: {.callout-note collapse="false"}
+## Hint
+`interview_date` is written year-month-day, so use `ymd()`. The deadline is `ymd("2026-04-10")`.
+:::
+:::
+
+::: {.solution exercise="ex11_days"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+hh2 <- hh |>
+  mutate(
+    date             = ymd(interview_date),
+    days_to_deadline = as.numeric(ymd("2026-04-10") - date)
+  )
+hh2 |> select(household_id, date, days_to_deadline) |> head()
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex11_days
+#| check: true
+expected <- as.numeric(as.Date("2026-04-10") - as.Date(hh$interview_date))
+if (!exists("hh2") || !all(c("date", "days_to_deadline") %in% names(hh2))) {
+  list(correct = FALSE, message = "hh2 needs the columns date and days_to_deadline.")
+} else if (!inherits(hh2$date, "Date")) {
+  list(correct = FALSE, message = "date should be a real date. Use ymd(interview_date).")
+} else if (isTRUE(all.equal(hh2$days_to_deadline, expected))) {
+  list(correct = TRUE, message = "Correct.")
+} else if (isTRUE(all.equal(hh2$days_to_deadline, -expected))) {
+  list(correct = FALSE, message = "The numbers are negative. Subtract the interview date from the deadline: deadline - date.")
+} else {
+  list(correct = FALSE, message = "days_to_deadline should be as.numeric(ymd(\"2026-04-10\") - date).")
+}
+```
+
+### Exercise 5: Order factor levels
+
+Survey answers should appear in a logical order, not alphabetically. Turn `answers` into a factor with the levels in this order: `"Low"`, `"Medium"`, `"High"`. Save it as `priority`.
+
+```{webr}
+#| exercise: ex11_factor
+#| setup: true
+library(forcats)
+answers <- c("High", "Low", "Medium", "High", "Low", "High")
+```
+
+```{webr}
+#| exercise: ex11_factor
+priority <- fct_relevel(answers, ______)
+levels(priority)
+```
+
+::: {.hint exercise="ex11_factor"}
+::: {.callout-note collapse="false"}
+## Hint
+List the levels in the order you want, each in quotes and separated by commas: `"Low", "Medium", "High"`.
+:::
+:::
+
+::: {.solution exercise="ex11_factor"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+priority <- fct_relevel(answers, "Low", "Medium", "High")
+levels(priority)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex11_factor
+#| check: true
+if (!exists("priority") || !is.factor(priority)) {
+  list(correct = FALSE, message = "priority should be a factor. Use fct_relevel().")
+} else if (identical(levels(priority), c("Low", "Medium", "High"))) {
+  list(correct = TRUE, message = "Correct. Tables and charts will now show Low, Medium, High in that order.")
+} else {
+  list(correct = FALSE, message = "The levels should be in the order Low, Medium, High.")
+}
+```
+
+## Level 2 complete
+
+You have finished the Intermediate level. You can now import, clean, reshape, join, summarise and visualise data, and write your own functions to avoid repetition. That covers most day-to-day analysis work. Level 3 moves on to iteration, regular expressions, statistical models and reproducible reports.
+
+## Your turn
+
+1. In the survey, count interviews by weekday. Which day had the most interviews? Plot it as a bar chart with the days in calendar order. (Hint: `wday(..., label = TRUE)` already returns an ordered factor.)
+2. Create household IDs in a new format, such as `"GUL-001"`: the first three letters of the district in upper case, a dash, and the number from the old ID. Use `str_sub()`, `str_to_upper()` and `str_c()`.
+3. Draw a bar chart of the main crops, ordered by frequency, with the bars running horizontally. (Hint: put the crop on the y axis and use `fct_rev(fct_infreq(...))`.)
+
+```{webr}
+library(dplyr)
+library(stringr)
+library(lubridate)
+library(forcats)
+library(ggplot2)
+hh <- read.csv("data/household-survey.csv")
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Cleaning only some of the variations.** After cleaning, run `unique()` or `count()` to check that the categories are what you expect.
+- **Forgetting that patterns are case-sensitive.** `str_detect(x, "camp")` does not match `"Camp"`. Clean the case first, or use `regex("camp", ignore_case = TRUE)`.
+- **Parsing with the wrong date order.** `ymd()` on day-first dates gives `NA` or, worse, the wrong date. Check a date with a day above 12.
+- **Subtracting dates stored as text.** Convert with `ymd()` first. `"2026-04-10" - "2026-03-15"` is an error.
+- **Relying on alphabetical order.** "High, Low, Medium" is rarely what you want. Set the order with `fct_relevel()` or `fct_infreq()`.
+
+## Summary
+
+- stringr functions start with `str_`. Use `str_squish()`, `str_to_title()`, `str_replace()` and `str_detect()` to clean and search text.
+- lubridate parses dates with `ymd()`, `dmy()` and `mdy()`. Pull out parts with `year()`, `month()` and `wday()`, and round with `floor_date()`.
+- Subtracting dates gives the days between them. Add time with `days()` and `months()`.
+- forcats controls factor levels: `fct_relevel()` sets the order, `fct_infreq()` sorts by frequency, `fct_recode()` renames and `fct_lump_n()` groups rare levels.
+
+**Next:** Level 3 starts on Day 12 with iteration in purrr.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 14: Strings](https://r4ds.hadley.nz/strings), [chapter 16: Factors](https://r4ds.hadley.nz/factors) and [chapter 17: Dates and times](https://r4ds.hadley.nz/datetimes).
+- Package documentation: [stringr](https://stringr.tidyverse.org/), [lubridate](https://lubridate.tidyverse.org/) and [forcats](https://forcats.tidyverse.org/).

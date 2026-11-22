@@ -1,0 +1,504 @@
+---
+title: "Day 6: Data wrangling with dplyr"
+subtitle: "Filter, select, sort, add columns and summarise by group, one readable step at a time"
+webr:
+  packages:
+    - dplyr
+    - palmerpenguins
+  resources:
+    - ../data/household-survey.csv
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Intermediate · **Time:** about 3 hours · **Needs:** [Day 5](day-05-functions-and-reading-data.qmd) · **Packages:** dplyr, palmerpenguins · **Data:** `data/household-survey.csv`
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Chain steps together with the pipe `|>`.
+2. Keep rows with `filter()` and columns with `select()`.
+3. Sort rows with `arrange()`.
+4. Add or change columns with `mutate()`.
+5. Summarise data by group with `group_by()` and `summarise()`, and count rows with `count()`.
+
+## Welcome to the tidyverse
+
+On Day 4 you filtered rows with square brackets: `households[households$size > 4, ]`. It works, but it gets hard to read when you need several steps.
+
+**dplyr** is a package of short, clearly named functions for working with data frames. It is part of the **tidyverse**, a set of packages that share the same style. Most R analysts use it every day.
+
+```{webr}
+library(dplyr)
+library(palmerpenguins)
+```
+
+Every dplyr function works the same way:
+
+- The first argument is a data frame.
+- You refer to columns by name, without `$` or quotes.
+- The result is a new data frame. The original does not change.
+
+## The pipe: `|>`
+
+The pipe takes the result on its left and passes it as the first argument of the function on its right. Read it as **"and then"**.
+
+```{webr}
+# Without the pipe: read from the inside out
+head(arrange(penguins, body_mass_g), 3)
+
+# With the pipe: read from top to bottom
+penguins |>
+  arrange(body_mass_g) |>
+  head(3)
+```
+
+Both give the same result. The second version reads like a recipe: "take penguins, and then sort by body mass, and then show the first 3 rows".
+
+::: {.callout-note}
+## `|>` and `%>%`
+You will see `%>%` in older code and online answers. It comes from the magrittr package and does almost the same job. `|>` is built into R (version 4.1 and later), so this course uses it.
+:::
+
+## `filter()`: keep rows
+
+`filter()` keeps the rows where a condition is `TRUE`:
+
+```{webr}
+penguins |>
+  filter(species == "Gentoo")
+```
+
+Separate several conditions with commas. A comma means "and":
+
+```{webr}
+penguins |>
+  filter(species == "Adelie", island == "Dream", body_mass_g > 4000)
+```
+
+For "or", use `|`. To match one of several values, use `%in%`:
+
+```{webr}
+penguins |>
+  filter(island %in% c("Biscoe", "Torgersen"))
+```
+
+Rows where the condition is `NA` are dropped. To find or drop missing values, use `is.na()`:
+
+```{webr}
+penguins |>
+  filter(!is.na(sex)) |>
+  nrow()
+```
+
+## `select()`: keep columns
+
+```{webr}
+penguins |>
+  select(species, island, body_mass_g)
+```
+
+`select()` has helpers. A minus sign drops columns, and `starts_with()`, `ends_with()` and `contains()` pick columns by name:
+
+```{webr}
+penguins |> select(-year, -sex)
+penguins |> select(species, ends_with("_mm"))
+```
+
+## `arrange()`: sort rows
+
+`arrange()` sorts from smallest to largest. Wrap a column in `desc()` to sort from largest to smallest:
+
+```{webr}
+penguins |>
+  arrange(desc(body_mass_g)) |>
+  select(species, island, body_mass_g)
+```
+
+## `mutate()`: add or change columns
+
+```{webr}
+penguins |>
+  mutate(body_mass_kg = body_mass_g / 1000) |>
+  select(species, body_mass_g, body_mass_kg)
+```
+
+You can create several columns at once, and later ones can use earlier ones:
+
+```{webr}
+penguins |>
+  mutate(
+    bill_ratio = bill_length_mm / bill_depth_mm,
+    long_bill  = bill_ratio > 2.5
+  ) |>
+  select(species, bill_ratio, long_bill)
+```
+
+## `summarise()` and `group_by()`: summarise by group
+
+`summarise()` reduces a data frame to one row of summary values:
+
+```{webr}
+penguins |>
+  summarise(
+    n         = n(),
+    mean_mass = mean(body_mass_g, na.rm = TRUE)
+  )
+```
+
+On its own that is not much better than `mean()`. The power comes from `group_by()`, which splits the data into groups so that `summarise()` gives one row per group:
+
+```{webr}
+penguins |>
+  group_by(species) |>
+  summarise(
+    n         = n(),
+    mean_mass = mean(body_mass_g, na.rm = TRUE),
+    max_mass  = max(body_mass_g, na.rm = TRUE)
+  )
+```
+
+`n()` counts the rows in each group. You can group by more than one column:
+
+```{webr}
+penguins |>
+  group_by(species, island) |>
+  summarise(mean_mass = mean(body_mass_g, na.rm = TRUE), .groups = "drop")
+```
+
+`.groups = "drop"` removes the grouping from the result, so it does not affect later steps.
+
+::: {.callout-tip}
+## Excel bridge
+`group_by()` plus `summarise()` does the job of a pivot table: rows are the groups, values are the summaries. The difference is that every step is written down, so you can rerun it on next month's data.
+:::
+
+### A shortcut: `count()`
+
+`count()` groups and counts in one step:
+
+```{webr}
+penguins |> count(species)
+penguins |> count(species, island, sort = TRUE)
+```
+
+## Putting it together
+
+A real question: in the household survey, what is the average income of households **with water**, by district, from highest to lowest?
+
+```{webr}
+hh <- read.csv("data/household-survey.csv")
+
+hh |>
+  filter(has_water == "yes") |>
+  group_by(district) |>
+  summarise(
+    households  = n(),
+    mean_income = mean(monthly_income_ugx, na.rm = TRUE)
+  ) |>
+  arrange(desc(mean_income))
+```
+
+Each line does one thing, and you can read the whole analysis from top to bottom. To check your work, run the pipeline one line at a time: select the first lines and run them before adding the next step.
+
+## Exercises
+
+The `penguins` data and dplyr are loaded for every exercise.
+
+### Exercise 1: Filter rows
+
+Keep only the **Chinstrap** penguins that weigh **more than 3,800 g**. Save the result as `heavy_chinstrap`.
+
+```{webr}
+#| exercise: ex6_filter
+#| setup: true
+library(dplyr)
+library(palmerpenguins)
+```
+
+```{webr}
+#| exercise: ex6_filter
+heavy_chinstrap <- penguins |>
+  filter(______)
+heavy_chinstrap
+```
+
+::: {.hint exercise="ex6_filter"}
+::: {.callout-note collapse="false"}
+## Hint
+You need two conditions, separated by a comma: one on `species` and one on `body_mass_g`.
+:::
+:::
+
+::: {.solution exercise="ex6_filter"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+heavy_chinstrap <- penguins |>
+  filter(species == "Chinstrap", body_mass_g > 3800)
+heavy_chinstrap
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex6_filter
+#| check: true
+expected <- penguins[!is.na(penguins$body_mass_g) & penguins$species == "Chinstrap" & penguins$body_mass_g > 3800, ]
+if (!exists("heavy_chinstrap") || !is.data.frame(heavy_chinstrap)) {
+  list(correct = FALSE, message = "Save the result as heavy_chinstrap.")
+} else if (nrow(heavy_chinstrap) == nrow(expected) && all(heavy_chinstrap$species == "Chinstrap") && all(heavy_chinstrap$body_mass_g > 3800)) {
+  list(correct = TRUE, message = sprintf("Correct: %d penguins.", nrow(expected)))
+} else if (any(heavy_chinstrap$species != "Chinstrap")) {
+  list(correct = FALSE, message = "Some rows are not Chinstrap penguins. Check the species condition.")
+} else {
+  list(correct = FALSE, message = sprintf("You should get %d rows. Check the body mass condition: more than 3800.", nrow(expected)))
+}
+```
+
+### Exercise 2: Select and sort
+
+Show the `species`, `island` and `flipper_length_mm` columns, sorted from the **longest** flipper to the shortest. Save the result as `flippers`.
+
+```{webr}
+#| exercise: ex6_select
+#| setup: true
+library(dplyr)
+library(palmerpenguins)
+```
+
+```{webr}
+#| exercise: ex6_select
+flippers <- penguins |>
+  select(______) |>
+  arrange(______)
+flippers
+```
+
+::: {.hint exercise="ex6_select"}
+::: {.callout-note collapse="false"}
+## Hint
+List the three column names inside `select()`. To sort from largest to smallest, wrap the column in `desc()`.
+:::
+:::
+
+::: {.solution exercise="ex6_select"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+flippers <- penguins |>
+  select(species, island, flipper_length_mm) |>
+  arrange(desc(flipper_length_mm))
+flippers
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex6_select
+#| check: true
+if (!exists("flippers") || !is.data.frame(flippers)) {
+  list(correct = FALSE, message = "Save the result as flippers.")
+} else if (!identical(names(flippers), c("species", "island", "flipper_length_mm"))) {
+  list(correct = FALSE, message = "Select exactly these columns, in this order: species, island, flipper_length_mm.")
+} else if (!isTRUE(all.equal(flippers$flipper_length_mm[1], max(penguins$flipper_length_mm, na.rm = TRUE)))) {
+  list(correct = FALSE, message = "The longest flipper should be first. Use desc() inside arrange().")
+} else {
+  list(correct = TRUE, message = "Correct. The longest flipper is 231 mm.")
+}
+```
+
+### Exercise 3: Add a column
+
+Add a column called `flipper_cm` with the flipper length in centimetres (divide millimetres by 10). Save the result as `penguins_cm`.
+
+```{webr}
+#| exercise: ex6_mutate
+#| setup: true
+library(dplyr)
+library(palmerpenguins)
+```
+
+```{webr}
+#| exercise: ex6_mutate
+penguins_cm <- penguins |>
+  mutate(______)
+penguins_cm |> select(species, flipper_length_mm, flipper_cm)
+```
+
+::: {.hint exercise="ex6_mutate"}
+::: {.callout-note collapse="false"}
+## Hint
+Inside `mutate()`, write the new column name, `=`, then the calculation: `flipper_cm = ______`.
+:::
+:::
+
+::: {.solution exercise="ex6_mutate"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+penguins_cm <- penguins |>
+  mutate(flipper_cm = flipper_length_mm / 10)
+penguins_cm |> select(species, flipper_length_mm, flipper_cm)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex6_mutate
+#| check: true
+if (!exists("penguins_cm") || !"flipper_cm" %in% names(penguins_cm)) {
+  list(correct = FALSE, message = "penguins_cm needs a new column called flipper_cm.")
+} else if (isTRUE(all.equal(penguins_cm$flipper_cm, penguins$flipper_length_mm / 10))) {
+  list(correct = TRUE, message = "Correct.")
+} else {
+  list(correct = FALSE, message = "flipper_cm should be flipper_length_mm divided by 10.")
+}
+```
+
+### Exercise 4: Summarise by group
+
+Using the household survey, calculate the **median household size** for each district. Name the summary column `median_size`, and save the result as `size_by_district`.
+
+```{webr}
+#| exercise: ex6_summarise
+#| setup: true
+library(dplyr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex6_summarise
+size_by_district <- hh |>
+  group_by(______) |>
+  summarise(median_size = ______)
+size_by_district
+```
+
+::: {.hint exercise="ex6_summarise"}
+::: {.callout-note collapse="false"}
+## Hint
+Group by `district`, then use `median(household_size)` inside `summarise()`.
+:::
+:::
+
+::: {.solution exercise="ex6_summarise"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+size_by_district <- hh |>
+  group_by(district) |>
+  summarise(median_size = median(household_size))
+size_by_district
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex6_summarise
+#| check: true
+expected <- tapply(hh$household_size, hh$district, median)
+if (!exists("size_by_district") || !is.data.frame(size_by_district)) {
+  list(correct = FALSE, message = "Save the result as size_by_district.")
+} else if (!all(c("district", "median_size") %in% names(size_by_district))) {
+  list(correct = FALSE, message = "The result needs a district column and a median_size column.")
+} else if (nrow(size_by_district) != 4) {
+  list(correct = FALSE, message = "You should get one row per district (4 rows). Did you use group_by(district)?")
+} else if (isTRUE(all.equal(size_by_district$median_size[order(size_by_district$district)], as.vector(expected[sort(names(expected))])))) {
+  list(correct = TRUE, message = "Correct.")
+} else {
+  list(correct = FALSE, message = "Use median(household_size) inside summarise().")
+}
+```
+
+### Exercise 5: Count
+
+How many households grow each main crop? Use `count()`, sort the result from most to least common, and save it as `crop_counts`.
+
+```{webr}
+#| exercise: ex6_count
+#| setup: true
+library(dplyr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex6_count
+crop_counts <- hh |>
+  count(______)
+crop_counts
+```
+
+::: {.hint exercise="ex6_count"}
+::: {.callout-note collapse="false"}
+## Hint
+Put the column name inside `count()`, then add `sort = TRUE`.
+:::
+:::
+
+::: {.solution exercise="ex6_count"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+crop_counts <- hh |>
+  count(main_crop, sort = TRUE)
+crop_counts
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex6_count
+#| check: true
+expected <- sort(table(hh$main_crop), decreasing = TRUE)
+if (!exists("crop_counts") || !all(c("main_crop", "n") %in% names(crop_counts))) {
+  list(correct = FALSE, message = "Use count(main_crop, ...) and save the result as crop_counts.")
+} else if (!identical(as.integer(crop_counts$n), as.integer(sort(crop_counts$n, decreasing = TRUE)))) {
+  list(correct = FALSE, message = "The counts are right. Add sort = TRUE so the most common crop comes first.")
+} else if (identical(as.integer(crop_counts$n), as.integer(expected))) {
+  list(correct = TRUE, message = sprintf("Correct. The most common crop is %s.", crop_counts$main_crop[1]))
+} else {
+  list(correct = FALSE, message = "Count the main_crop column.")
+}
+```
+
+## Your turn
+
+Use the `penguins` data and write one pipeline for each question.
+
+1. Which island has the heaviest penguins on average? Drop rows where `body_mass_g` is missing first.
+2. For each species, what share of penguins are female? Hint: `mean(sex == "female", na.rm = TRUE)` inside `summarise()`.
+3. Add a column that puts each penguin in a size group (`"small"` below 3,500 g, otherwise `"large"`), then count penguins by species and size group.
+
+```{webr}
+library(dplyr)
+library(palmerpenguins)
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Using `=` in `filter()`.** Write `filter(species == "Gentoo")`, with two equals signs.
+- **Forgetting to save the result.** `penguins |> filter(...)` prints the result but does not change `penguins`. Assign it: `gentoo <- penguins |> filter(...)`.
+- **Quoting column names.** `select("species")` works, but `filter("species" == "Gentoo")` compares two pieces of text and keeps no rows. Write column names without quotes.
+- **Forgetting `na.rm = TRUE` in `summarise()`.** One missing value makes the group's mean `NA`.
+- **Leaving data grouped.** A grouped data frame affects later `mutate()` and `summarise()` steps. Use `.groups = "drop"` or `ungroup()`.
+
+## Summary
+
+- The pipe `|>` passes a result into the next function. Read it as "and then".
+- `filter()` keeps rows, `select()` keeps columns and `arrange()` sorts.
+- `mutate()` adds or changes columns.
+- `group_by()` plus `summarise()` gives one row per group. `n()` counts rows in each group.
+- `count()` is a shortcut for grouping and counting.
+
+**Tomorrow:** you will reshape data between wide and long formats, and join two tables together.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 3: Data transformation](https://r4ds.hadley.nz/data-transform).
+- [dplyr documentation](https://dplyr.tidyverse.org/), including the "Introduction to dplyr" article.

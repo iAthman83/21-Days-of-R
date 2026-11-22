@@ -1,0 +1,514 @@
+---
+title: "Day 8: Visualisation with ggplot2"
+subtitle: "Build clear charts layer by layer, and choose the right chart for your question"
+webr:
+  packages:
+    - dplyr
+    - ggplot2
+    - palmerpenguins
+    - gapminder
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Intermediate · **Time:** about 3 hours · **Needs:** [Day 6](day-06-dplyr.qmd) · **Packages:** ggplot2, dplyr, palmerpenguins, gapminder
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Explain the three parts of every ggplot: data, aesthetics and geoms.
+2. Draw scatter plots, line charts, bar charts, histograms and box plots.
+3. Map a variable to colour, and split a chart into panels with facets.
+4. Add titles and axis labels, change scales and apply a theme.
+5. Choose a chart type that fits your question.
+
+```{webr}
+library(ggplot2)
+library(dplyr)
+library(palmerpenguins)
+library(gapminder)
+```
+
+## The grammar of graphics
+
+**ggplot2** builds a chart from layers. Every chart needs three things:
+
+1. **Data**: a data frame.
+2. **Aesthetics**: which columns go on which visual property, such as the x position, y position or colour. You set them inside `aes()`.
+3. **Geoms**: the shapes that show the data, such as points, lines or bars. Each one is a `geom_` function.
+
+You join the layers with `+`:
+
+```{webr}
+ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point()
+```
+
+Read it as: "take `penguins`, put flipper length on x and body mass on y, and draw points". The warning about removed rows is R telling you that two penguins have missing measurements.
+
+::: {.callout-note}
+## `+` not `|>`
+ggplot2 is older than the pipe, so layers are joined with `+`. A common error is writing `|>` between layers. You can still pipe data **into** `ggplot()`: `penguins |> ggplot(aes(...))`.
+:::
+
+## Adding colour
+
+Map a third variable to `colour` inside `aes()`, and ggplot2 adds a legend:
+
+```{webr}
+ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g, colour = species)) +
+  geom_point()
+```
+
+Now the chart shows something new: the three species form separate groups.
+
+Setting a colour for **every** point is different. Put it outside `aes()`, as a fixed value:
+
+```{webr}
+ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point(colour = "steelblue", size = 2, alpha = 0.6)
+```
+
+`alpha` sets transparency, which helps when points overlap.
+
+## Common chart types
+
+### Line chart: change over time
+
+```{webr}
+gapminder |>
+  filter(country %in% c("Uganda", "Kenya", "Rwanda")) |>
+  ggplot(aes(x = year, y = lifeExp, colour = country)) +
+  geom_line() +
+  geom_point()
+```
+
+You can stack several geoms. Here, lines show the trend and points show each measurement.
+
+### Bar chart: counts of categories
+
+`geom_bar()` counts the rows for you:
+
+```{webr}
+ggplot(penguins, aes(x = island)) +
+  geom_bar()
+```
+
+If you have already calculated the values, use `geom_col()` and give it a y:
+
+```{webr}
+penguins |>
+  group_by(species) |>
+  summarise(mean_mass = mean(body_mass_g, na.rm = TRUE)) |>
+  ggplot(aes(x = species, y = mean_mass)) +
+  geom_col()
+```
+
+### Histogram: the shape of one variable
+
+```{webr}
+ggplot(penguins, aes(x = body_mass_g)) +
+  geom_histogram(binwidth = 200)
+```
+
+Try changing `binwidth`. Too wide hides detail, and too narrow shows noise.
+
+### Box plot: compare a variable across groups
+
+```{webr}
+ggplot(penguins, aes(x = species, y = body_mass_g)) +
+  geom_boxplot()
+```
+
+The box covers the middle half of the values, the line is the median, and dots are unusual values.
+
+## Facets: small multiples
+
+`facet_wrap()` draws one panel per group, with the same axes, so you can compare them easily:
+
+```{webr}
+ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point() +
+  facet_wrap(~ island)
+```
+
+## Labels, scales and themes
+
+A chart for other people needs a title and clear axis labels. `labs()` sets them:
+
+```{webr}
+gapminder |>
+  filter(year == 2007) |>
+  ggplot(aes(x = gdpPercap, y = lifeExp, colour = continent, size = pop)) +
+  geom_point(alpha = 0.6) +
+  scale_x_log10(labels = scales::label_dollar()) +
+  labs(
+    title    = "Richer countries tend to have longer life expectancy",
+    subtitle = "Each point is a country in 2007. Point size shows population.",
+    x        = "GDP per person (US$, log scale)",
+    y        = "Life expectancy (years)",
+    colour   = "Continent",
+    size     = "Population",
+    caption  = "Source: Gapminder"
+  ) +
+  theme_minimal()
+```
+
+A few things are happening here:
+
+- `scale_x_log10()` spreads out the crowded low-income countries. Use a log scale when values range over several orders of magnitude.
+- A good title states the finding, not just the variables.
+- `theme_minimal()` removes the grey background. Try `theme_bw()` or `theme_classic()` too.
+
+## Choosing a chart
+
+| Your question | Chart | Geom |
+|---|---|---|
+| How are two numbers related? | Scatter plot | `geom_point()` |
+| How did something change over time? | Line chart | `geom_line()` |
+| How many in each category? | Bar chart | `geom_bar()` or `geom_col()` |
+| What does one variable's distribution look like? | Histogram | `geom_histogram()` |
+| How does a number differ between groups? | Box plot | `geom_boxplot()` |
+
+::: {.callout-tip}
+## Excel bridge
+In Excel you pick a chart type first, then the data. In ggplot2 you start from the data and the question, then add layers. Changing a bar chart into a box plot means changing one line, not rebuilding the chart.
+:::
+
+## Saving a chart
+
+On your own computer, save the last chart you drew with `ggsave()`:
+
+```r
+ggsave("life-expectancy.png", width = 8, height = 5, dpi = 300)
+```
+
+## Exercises
+
+In each exercise, save your chart as `p` and print it.
+
+### Exercise 1: Scatter plot
+
+Draw a scatter plot of `bill_length_mm` (x) against `bill_depth_mm` (y) for the penguins.
+
+```{webr}
+#| exercise: ex8_scatter
+#| setup: true
+library(ggplot2)
+library(palmerpenguins)
+aes_of <- function(p, a) {
+  m <- p$mapping[[a]]
+  if (is.null(m) && length(p$layers)) m <- p$layers[[1]]$mapping[[a]]
+  if (is.null(m)) NA_character_ else rlang::as_label(m)
+}
+```
+
+```{webr}
+#| exercise: ex8_scatter
+p <- ggplot(penguins, aes(x = ______, y = ______)) +
+  ______()
+p
+```
+
+::: {.hint exercise="ex8_scatter"}
+::: {.callout-note collapse="false"}
+## Hint
+Put the column names inside `aes()`. Points are drawn with `geom_point()`.
+:::
+:::
+
+::: {.solution exercise="ex8_scatter"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+p <- ggplot(penguins, aes(x = bill_length_mm, y = bill_depth_mm)) +
+  geom_point()
+p
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex8_scatter
+#| check: true
+if (!exists("p") || !inherits(p, "ggplot")) {
+  list(correct = FALSE, message = "Save your chart as p.")
+} else if (!identical(aes_of(p, "x"), "bill_length_mm") || !identical(aes_of(p, "y"), "bill_depth_mm")) {
+  list(correct = FALSE, message = "Put bill_length_mm on x and bill_depth_mm on y.")
+} else if (!any(vapply(p$layers, function(l) inherits(l$geom, "GeomPoint"), logical(1)))) {
+  list(correct = FALSE, message = "Add geom_point() to draw points.")
+} else {
+  list(correct = TRUE, message = "Correct. Across all penguins, longer bills seem to be shallower. Exercise 2 shows why that is misleading.")
+}
+```
+
+### Exercise 2: Map colour to a variable
+
+Take the same chart and colour the points by `species`. What do you notice?
+
+```{webr}
+#| exercise: ex8_colour
+#| setup: true
+library(ggplot2)
+library(palmerpenguins)
+aes_of <- function(p, a) {
+  m <- p$mapping[[a]]
+  if (is.null(m) && length(p$layers)) m <- p$layers[[1]]$mapping[[a]]
+  if (is.null(m)) NA_character_ else rlang::as_label(m)
+}
+```
+
+```{webr}
+#| exercise: ex8_colour
+p <- ggplot(penguins, aes(x = bill_length_mm, y = bill_depth_mm, ______)) +
+  geom_point()
+p
+```
+
+::: {.hint exercise="ex8_colour"}
+::: {.callout-note collapse="false"}
+## Hint
+Inside `aes()`, add `colour = ` followed by the column name.
+:::
+:::
+
+::: {.solution exercise="ex8_colour"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+p <- ggplot(penguins, aes(x = bill_length_mm, y = bill_depth_mm, colour = species)) +
+  geom_point()
+p
+```
+Within each species, longer bills are also deeper. Across all penguins together, the trend looked weak or even reversed. Colour revealed groups that hid the real pattern.
+:::
+:::
+
+```{webr}
+#| exercise: ex8_colour
+#| check: true
+if (!exists("p") || !inherits(p, "ggplot")) {
+  list(correct = FALSE, message = "Save your chart as p.")
+} else if (identical(aes_of(p, "colour"), "species")) {
+  list(correct = TRUE, message = "Correct. Within each species, longer bills are deeper.")
+} else {
+  list(correct = FALSE, message = "Map colour to species inside aes(): colour = species.")
+}
+```
+
+### Exercise 3: Bar chart
+
+Draw a bar chart showing how many penguins of each `species` there are.
+
+```{webr}
+#| exercise: ex8_bar
+#| setup: true
+library(ggplot2)
+library(palmerpenguins)
+aes_of <- function(p, a) {
+  m <- p$mapping[[a]]
+  if (is.null(m) && length(p$layers)) m <- p$layers[[1]]$mapping[[a]]
+  if (is.null(m)) NA_character_ else rlang::as_label(m)
+}
+```
+
+```{webr}
+#| exercise: ex8_bar
+p <- ggplot(penguins, aes(x = ______)) +
+  ______()
+p
+```
+
+::: {.hint exercise="ex8_bar"}
+::: {.callout-note collapse="false"}
+## Hint
+`geom_bar()` counts the rows for each value of x, so you only need an x aesthetic.
+:::
+:::
+
+::: {.solution exercise="ex8_bar"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+p <- ggplot(penguins, aes(x = species)) +
+  geom_bar()
+p
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex8_bar
+#| check: true
+if (!exists("p") || !inherits(p, "ggplot")) {
+  list(correct = FALSE, message = "Save your chart as p.")
+} else if (!identical(aes_of(p, "x"), "species")) {
+  list(correct = FALSE, message = "Put species on the x axis.")
+} else if (!any(vapply(p$layers, function(l) inherits(l$geom, "GeomBar"), logical(1)))) {
+  list(correct = FALSE, message = "Use geom_bar(), which counts the rows for you.")
+} else {
+  list(correct = TRUE, message = "Correct. Adelie is the most common species.")
+}
+```
+
+### Exercise 4: Line chart
+
+Draw a line chart of Uganda's life expectancy (`lifeExp`) over time (`year`). The data is already filtered for you as `uganda`.
+
+```{webr}
+#| exercise: ex8_line
+#| setup: true
+library(ggplot2)
+library(dplyr)
+library(gapminder)
+uganda <- gapminder |> filter(country == "Uganda")
+aes_of <- function(p, a) {
+  m <- p$mapping[[a]]
+  if (is.null(m) && length(p$layers)) m <- p$layers[[1]]$mapping[[a]]
+  if (is.null(m)) NA_character_ else rlang::as_label(m)
+}
+```
+
+```{webr}
+#| exercise: ex8_line
+p <- ggplot(uganda, aes(______)) +
+  ______()
+p
+```
+
+::: {.hint exercise="ex8_line"}
+::: {.callout-note collapse="false"}
+## Hint
+Put `year` on x and `lifeExp` on y, then add `geom_line()`.
+:::
+:::
+
+::: {.solution exercise="ex8_line"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+p <- ggplot(uganda, aes(x = year, y = lifeExp)) +
+  geom_line()
+p
+```
+Life expectancy rose until the late 1980s, fell during the 1990s, then recovered. A line chart makes that change easy to see.
+:::
+:::
+
+```{webr}
+#| exercise: ex8_line
+#| check: true
+if (!exists("p") || !inherits(p, "ggplot")) {
+  list(correct = FALSE, message = "Save your chart as p.")
+} else if (!identical(aes_of(p, "x"), "year") || !identical(aes_of(p, "y"), "lifeExp")) {
+  list(correct = FALSE, message = "Put year on x and lifeExp on y.")
+} else if (!any(vapply(p$layers, function(l) inherits(l$geom, "GeomLine"), logical(1)))) {
+  list(correct = FALSE, message = "Use geom_line() to draw a line.")
+} else {
+  list(correct = TRUE, message = "Correct. Notice the fall in the 1990s and the recovery after.")
+}
+```
+
+### Exercise 5: Labels
+
+This box plot works, but it has no title and the axis labels are column names. Add a title and clear x and y labels with `labs()`.
+
+```{webr}
+#| exercise: ex8_labs
+#| setup: true
+library(ggplot2)
+library(palmerpenguins)
+```
+
+```{webr}
+#| exercise: ex8_labs
+p <- ggplot(penguins, aes(x = species, y = body_mass_g)) +
+  geom_boxplot() +
+  labs(
+    title = ______,
+    x     = ______,
+    y     = ______
+  )
+p
+```
+
+::: {.hint exercise="ex8_labs"}
+::: {.callout-note collapse="false"}
+## Hint
+Each label is text, so put it in quotes. A good title states the finding, for example `"Gentoo penguins are the heaviest"`.
+:::
+:::
+
+::: {.solution exercise="ex8_labs"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+p <- ggplot(penguins, aes(x = species, y = body_mass_g)) +
+  geom_boxplot() +
+  labs(
+    title = "Gentoo penguins are the heaviest",
+    x     = "Species",
+    y     = "Body mass (g)"
+  )
+p
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex8_labs
+#| check: true
+has <- function(x) !is.null(x) && is.character(x) && nzchar(x)
+labs_set <- if (exists("p") && inherits(p, "ggplot")) p$labels else NULL
+if (is.null(labs_set)) {
+  list(correct = FALSE, message = "Save your chart as p.")
+} else if (!has(labs_set$title)) {
+  list(correct = FALSE, message = "Add a title inside labs(), in quotes.")
+} else if (!has(labs_set$x) || !has(labs_set$y) || identical(labs_set$y, "body_mass_g")) {
+  list(correct = FALSE, message = "Give both axes clear labels, such as \"Species\" and \"Body mass (g)\".")
+} else {
+  list(correct = TRUE, message = "Correct. Your chart now explains itself.")
+}
+```
+
+## Your turn
+
+1. Using `gapminder` for 2007, draw a box plot of life expectancy by continent. Which continent has the widest spread?
+2. Draw a histogram of `flipper_length_mm` and use `facet_wrap(~ species)` to split it by species.
+3. Recreate the GDP and life expectancy chart for 1957. Write a title that states what you see.
+
+```{webr}
+library(ggplot2)
+library(dplyr)
+library(palmerpenguins)
+library(gapminder)
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Using `|>` instead of `+` between layers.** ggplot2 layers are joined with `+`.
+- **Putting `+` at the start of a line.** End each line with `+`. If the next line starts with `+`, R thinks the chart has already finished.
+- **Fixed colours inside `aes()`.** `aes(colour = "blue")` creates a legend entry called "blue" in the default red. Put fixed values outside: `geom_point(colour = "blue")`.
+- **`geom_bar()` with a y value.** `geom_bar()` counts rows. If you already have the values, use `geom_col()`.
+- **Titles that only name the variables.** "Mass by species" says what is plotted. "Gentoo penguins are the heaviest" says what it means.
+
+## Summary
+
+- Every ggplot has data, aesthetics (`aes()`) and geoms, joined with `+`.
+- Map variables to x, y, colour or size inside `aes()`. Set fixed values outside it.
+- `geom_point()`, `geom_line()`, `geom_bar()`/`geom_col()`, `geom_histogram()` and `geom_boxplot()` cover most needs.
+- `facet_wrap()` draws one panel per group.
+- `labs()` sets titles and labels, `scale_*()` functions change axes and `theme_*()` functions change the look.
+
+**Tomorrow:** you will write code that makes decisions and repeats steps, with `if`, `case_when()` and loops.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 1: Data visualisation](https://r4ds.hadley.nz/data-visualize) and [chapter 9: Layers](https://r4ds.hadley.nz/layers).
+- [ggplot2 documentation](https://ggplot2.tidyverse.org/), including a gallery of every geom.
+- [Fundamentals of Data Visualization](https://clauswilke.com/dataviz/), by Claus O. Wilke. Free online.

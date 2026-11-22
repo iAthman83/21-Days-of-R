@@ -1,0 +1,509 @@
+---
+title: "Day 10: Writing your own functions"
+subtitle: "Turn code you repeat into functions with arguments, defaults, checks and clear results"
+webr:
+  packages:
+    - dplyr
+  resources:
+    - ../data/household-survey.csv
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Intermediate · **Time:** about 2.5 hours · **Needs:** [Day 9](day-09-control-flow.qmd) · **Packages:** dplyr · **Data:** `data/household-survey.csv`
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Write a function with `function()`, and call it.
+2. Give arguments default values.
+3. Return a result, including several results in a list.
+4. Check inputs and stop with a clear error message.
+5. Decide when code should become a function.
+
+```{webr}
+library(dplyr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+## Why write functions?
+
+Suppose you convert Ugandan shillings to US dollars in several places:
+
+```r
+hh$income_usd   <- round(hh$monthly_income_ugx / 3700, 2)
+rent_usd        <- round(450000 / 3700, 2)
+budget_usd      <- round(budget_ugx / 3700, 2)
+```
+
+The exchange rate (3,700 here, as an example) is copied three times. When it changes, you must find and edit every copy, and one typo gives a wrong answer with no error. A function puts the logic in one place:
+
+```{webr}
+ugx_to_usd <- function(amount) {
+  round(amount / 3700, 2)
+}
+
+ugx_to_usd(450000)
+ugx_to_usd(c(100000, 250000))
+```
+
+A good rule: **when you have copied the same code three times, write a function.**
+
+## The parts of a function
+
+```r
+name <- function(argument1, argument2) {
+  # body: the code that runs
+  result
+}
+```
+
+- **Name:** a verb that says what the function does, such as `ugx_to_usd` or `clean_names`.
+- **Arguments:** the inputs, listed inside `function( )`.
+- **Body:** the code inside `{ }`. It can use the arguments like normal objects.
+- **Result:** the value of the **last line** of the body is returned.
+
+You can also return a value early with `return()`. It is most useful inside an `if`:
+
+```{webr}
+describe_rainfall <- function(mm) {
+  if (is.na(mm)) {
+    return("no data")
+  }
+  if (mm < 50) "dry" else "normal"
+}
+
+describe_rainfall(30)
+describe_rainfall(NA)
+```
+
+## Arguments and defaults
+
+Give an argument a default value with `=`. Callers can leave it out, or change it:
+
+```{webr}
+ugx_to_usd <- function(amount, rate = 3700, digits = 2) {
+  round(amount / rate, digits)
+}
+
+ugx_to_usd(450000)                 # uses the defaults
+ugx_to_usd(450000, rate = 3800)    # a different rate
+ugx_to_usd(450000, digits = 0)
+```
+
+Put the arguments people must always give (the data) first, and the ones with defaults (the settings) after.
+
+## Functions that work on vectors and columns
+
+If the body only uses vectorised operations, such as maths, comparisons, `if_else()` or `case_when()`, your function works on whole vectors. That means you can use it inside `mutate()`:
+
+```{webr}
+income_band <- function(income) {
+  case_when(
+    income <  200000 ~ "low",
+    income <  600000 ~ "middle",
+    income >= 600000 ~ "high"
+  )
+}
+
+hh |>
+  mutate(
+    income_usd = ugx_to_usd(monthly_income_ugx),
+    band       = income_band(monthly_income_ugx)
+  ) |>
+  select(household_id, monthly_income_ugx, income_usd, band) |>
+  head()
+```
+
+A function that uses `if` (not `if_else()`) only works on one value at a time.
+
+## Checking inputs
+
+A function that quietly returns a wrong answer is worse than one that fails. Check the inputs at the start and stop with a message that says what went wrong:
+
+```{webr}
+percent <- function(part, total) {
+  if (!is.numeric(part) || !is.numeric(total)) {
+    stop("`part` and `total` must be numbers.")
+  }
+  if (any(total == 0)) {
+    stop("`total` cannot be zero.")
+  }
+  round(100 * part / total, 1)
+}
+
+percent(25, 80)
+```
+
+```{webr}
+percent("25", 80) # Error expected: the check stops the function with a clear message
+```
+
+`stopifnot()` is a shorter way to write simple checks:
+
+```{webr}
+mean_income <- function(incomes) {
+  stopifnot(is.numeric(incomes))
+  mean(incomes, na.rm = TRUE)
+}
+mean_income(hh$monthly_income_ugx)
+```
+
+## Returning several results
+
+A function returns one object. To return several values, put them in a list (or a data frame):
+
+```{webr}
+summarise_income <- function(incomes) {
+  list(
+    n       = sum(!is.na(incomes)),
+    missing = sum(is.na(incomes)),
+    mean    = mean(incomes, na.rm = TRUE),
+    median  = median(incomes, na.rm = TRUE)
+  )
+}
+
+result <- summarise_income(hh$monthly_income_ugx)
+result$mean
+str(result)
+```
+
+## Functions that take a data frame
+
+Functions can take whole data frames, which lets you package a full analysis step:
+
+```{webr}
+district_report <- function(data, district_name) {
+  rows <- data[data$district == district_name, ]
+  if (nrow(rows) == 0) {
+    stop("No households found for district: ", district_name)
+  }
+  data.frame(
+    district    = district_name,
+    households  = nrow(rows),
+    share_water = mean(rows$has_water == "yes"),
+    mean_income = mean(rows$monthly_income_ugx, na.rm = TRUE)
+  )
+}
+
+district_report(hh, "Gulu")
+district_report(hh, "Arua")
+```
+
+On Day 12 you will run a function like this for every district at once with `purrr::map()`.
+
+## Writing functions well
+
+- **One job per function.** `clean_names()` and `summarise_income()` are easier to test and reuse than one `do_everything()`.
+- **Clear names.** Use verbs for functions and nouns for arguments.
+- **Explain the purpose in a comment above the function**: what it takes, what it returns and any assumptions. On Day 20 you will turn these comments into proper help pages.
+- **Avoid using objects from outside the function.** Pass everything the function needs as an argument. A function that quietly reads a global object breaks when that object changes. (Day 17 explains how R finds objects.)
+
+## Exercises
+
+### Exercise 1: Your first function
+
+Write a function called `add_vat` that takes one argument, `price`, and returns the price with 18% VAT added (multiply by 1.18).
+
+```{webr}
+#| exercise: ex10_first
+add_vat <- function(______) {
+  ______
+}
+add_vat(1000)
+```
+
+::: {.hint exercise="ex10_first"}
+::: {.callout-note collapse="false"}
+## Hint
+The argument is `price`. The body is one line: `price * 1.18`.
+:::
+:::
+
+::: {.solution exercise="ex10_first"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+add_vat <- function(price) {
+  price * 1.18
+}
+add_vat(1000)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex10_first
+#| check: true
+if (!exists("add_vat") || !is.function(add_vat)) {
+  list(correct = FALSE, message = "Create a function called add_vat.")
+} else if (!isTRUE(all.equal(tryCatch(add_vat(1000), error = function(e) NA), 1180))) {
+  list(correct = FALSE, message = "add_vat(1000) should give 1180.")
+} else if (!isTRUE(all.equal(tryCatch(add_vat(c(100, 200)), error = function(e) NA), c(118, 236)))) {
+  list(correct = FALSE, message = "Your function should also work on a vector of prices.")
+} else {
+  list(correct = TRUE, message = "Correct. It also works on vectors.")
+}
+```
+
+### Exercise 2: A default value
+
+Change the function so that the VAT rate is an argument called `rate`, with a **default of 0.18**. `add_vat(1000)` should give 1180, and `add_vat(1000, rate = 0.1)` should give 1100.
+
+```{webr}
+#| exercise: ex10_default
+add_vat <- function(price, ______) {
+  price * (1 + ______)
+}
+add_vat(1000)
+add_vat(1000, rate = 0.1)
+```
+
+::: {.hint exercise="ex10_default"}
+::: {.callout-note collapse="false"}
+## Hint
+Set the default inside the brackets: `rate = 0.18`. Use `rate` in the body.
+:::
+:::
+
+::: {.solution exercise="ex10_default"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+add_vat <- function(price, rate = 0.18) {
+  price * (1 + rate)
+}
+add_vat(1000)
+add_vat(1000, rate = 0.1)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex10_default
+#| check: true
+safe <- function(...) tryCatch(add_vat(...), error = function(e) NA)
+if (!exists("add_vat") || !is.function(add_vat)) {
+  list(correct = FALSE, message = "Keep the function name add_vat.")
+} else if (!isTRUE(all.equal(safe(1000), 1180))) {
+  list(correct = FALSE, message = "add_vat(1000) should give 1180. Did you set the default rate = 0.18?")
+} else if (!isTRUE(all.equal(safe(1000, rate = 0.1), 1100))) {
+  list(correct = FALSE, message = "add_vat(1000, rate = 0.1) should give 1100. Use rate in the body.")
+} else {
+  list(correct = TRUE, message = "Correct. The default makes the common case short, and the argument keeps it flexible.")
+}
+```
+
+### Exercise 3: Check the input
+
+Write a function `safe_mean` that:
+
+- stops with an error if `x` is not numeric, and
+- otherwise returns the mean of `x`, ignoring missing values.
+
+```{webr}
+#| exercise: ex10_stop
+safe_mean <- function(x) {
+  if (______) {
+    stop("x must be numeric")
+  }
+  ______
+}
+safe_mean(c(4, NA, 8))
+```
+
+::: {.hint exercise="ex10_stop"}
+::: {.callout-note collapse="false"}
+## Hint
+The condition is `!is.numeric(x)`. The `!` means "not". The last line is `mean(x, na.rm = TRUE)`.
+:::
+:::
+
+::: {.solution exercise="ex10_stop"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+safe_mean <- function(x) {
+  if (!is.numeric(x)) {
+    stop("x must be numeric")
+  }
+  mean(x, na.rm = TRUE)
+}
+safe_mean(c(4, NA, 8))
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex10_stop
+#| check: true
+fails_on_text <- tryCatch({ safe_mean(c("a", "b")); FALSE }, error = function(e) TRUE)
+value <- tryCatch(safe_mean(c(4, NA, 8)), error = function(e) NA)
+if (!exists("safe_mean") || !is.function(safe_mean)) {
+  list(correct = FALSE, message = "Create a function called safe_mean.")
+} else if (!fails_on_text) {
+  list(correct = FALSE, message = "safe_mean(\"a\") should stop with an error. Check the condition: !is.numeric(x).")
+} else if (!isTRUE(all.equal(value, 6))) {
+  list(correct = FALSE, message = "safe_mean(c(4, NA, 8)) should give 6. Use na.rm = TRUE.")
+} else {
+  list(correct = TRUE, message = "Correct. It fails loudly on bad input and handles missing values.")
+}
+```
+
+### Exercise 4: A vectorised function
+
+Write a function `size_group` that takes a vector of household sizes and returns `"small"` (1 to 3), `"medium"` (4 to 6) or `"large"` (7 or more) for each value. It must work on a whole column, so use `case_when()`.
+
+```{webr}
+#| exercise: ex10_vector
+#| setup: true
+library(dplyr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex10_vector
+size_group <- function(size) {
+  case_when(
+    ______
+  )
+}
+hh |>
+  mutate(group = size_group(household_size)) |>
+  count(group)
+```
+
+::: {.hint exercise="ex10_vector"}
+::: {.callout-note collapse="false"}
+## Hint
+You wrote the same `case_when()` on Day 9. Inside a function, use the argument name `size` instead of the column name.
+:::
+:::
+
+::: {.solution exercise="ex10_vector"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+size_group <- function(size) {
+  case_when(
+    size <= 3 ~ "small",
+    size <= 6 ~ "medium",
+    size >= 7 ~ "large"
+  )
+}
+hh |>
+  mutate(group = size_group(household_size)) |>
+  count(group)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex10_vector
+#| check: true
+got <- tryCatch(size_group(c(1, 3, 4, 6, 7, 10)), error = function(e) NULL)
+if (!exists("size_group") || !is.function(size_group)) {
+  list(correct = FALSE, message = "Create a function called size_group.")
+} else if (is.null(got)) {
+  list(correct = FALSE, message = "size_group() gave an error. Use the argument name size inside case_when().")
+} else if (identical(as.character(got), c("small", "small", "medium", "medium", "large", "large"))) {
+  list(correct = TRUE, message = "Correct. Your function works on a whole column.")
+} else {
+  list(correct = FALSE, message = "Check the boundaries: 1-3 small, 4-6 medium, 7 or more large.")
+}
+```
+
+### Exercise 5: A function that takes a data frame
+
+Write a function `water_share` that takes the survey `data` and a `district_name`, and returns the **share of households in that district with water** (a number between 0 and 1).
+
+```{webr}
+#| exercise: ex10_df
+#| setup: true
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex10_df
+water_share <- function(data, district_name) {
+  rows <- data[______, ]
+  mean(______)
+}
+water_share(hh, "Gulu")
+```
+
+::: {.hint exercise="ex10_df"}
+::: {.callout-note collapse="false"}
+## Hint
+Keep the rows where `data$district == district_name`. Then `mean(rows$has_water == "yes")` gives the share, because `TRUE` counts as 1.
+:::
+:::
+
+::: {.solution exercise="ex10_df"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+water_share <- function(data, district_name) {
+  rows <- data[data$district == district_name, ]
+  mean(rows$has_water == "yes")
+}
+water_share(hh, "Gulu")
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex10_df
+#| check: true
+truth <- function(d) mean(hh$has_water[hh$district == d] == "yes")
+got <- tryCatch(sapply(c("Gulu", "Arua", "Mbale", "Hoima"), function(d) water_share(hh, d)), error = function(e) NULL)
+if (!exists("water_share") || !is.function(water_share)) {
+  list(correct = FALSE, message = "Create a function called water_share.")
+} else if (is.null(got)) {
+  list(correct = FALSE, message = "water_share() gave an error. Use the arguments data and district_name inside the function.")
+} else if (isTRUE(all.equal(unname(got), unname(sapply(c("Gulu", "Arua", "Mbale", "Hoima"), truth))))) {
+  list(correct = TRUE, message = sprintf("Correct. In Gulu the share is %.2f.", truth("Gulu")))
+} else {
+  list(correct = FALSE, message = "The function should give the share for the district you pass in, not a fixed one.")
+}
+```
+
+## Your turn
+
+1. Write `celsius_to_fahrenheit()` and `fahrenheit_to_celsius()`. Check that converting a value one way and back gives the original.
+2. Write `count_missing(data)` that returns the number of missing values in each column of a data frame. Hint: `colSums(is.na(data))`.
+3. Extend `district_report()` so that it also returns the most common main crop. What should it do if two crops are tied?
+
+```{webr}
+library(dplyr)
+hh <- read.csv("data/household-survey.csv")
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Forgetting to call the function.** Writing `add_vat` shows the code. Writing `add_vat(1000)` runs it.
+- **Using a column name inside the function.** Inside `size_group()`, use the argument `size`, not `household_size`. The function should not know where its data came from.
+- **Relying on global objects.** If the function uses `rate` but `rate` is not an argument, it silently depends on whatever `rate` happens to be outside.
+- **Using `if` in a function meant for columns.** `if` handles one value. Use `if_else()` or `case_when()` for vectors.
+- **Unclear error messages.** "Error" helps no one. "`total` cannot be zero" tells the user what to fix.
+
+## Summary
+
+- `name <- function(args) { body }` creates a function. The last value in the body is returned.
+- Defaults (`rate = 0.18`) make common calls short and keep the function flexible.
+- Use `stop()` or `stopifnot()` to check inputs and fail with a clear message.
+- Return several values in a list.
+- Write a function when you have copied code three times, and give each function one job.
+
+**Tomorrow:** you will clean text with stringr, work with dates in lubridate and control categories with forcats.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 25: Functions](https://r4ds.hadley.nz/functions).
+- [Hands-On Programming with R, chapter 2: The very basics](https://rstudio-education.github.io/hopr/basics.html) (writing your first functions).
+- [Advanced R (2e), chapter 6: Functions](https://adv-r.hadley.nz/functions.html), for when you want the details.
