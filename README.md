@@ -1,0 +1,95 @@
+# 21 Days of R
+
+**A free, hands-on R course from complete beginner to expert. Learn R by doing: run every example and exercise in your browser, with nothing to install.**
+
+[**Start the course →**](https://iathman83.github.io/21-Days-of-R/)
+
+[![Check lessons and publish site](https://github.com/iAthman83/21-Days-of-R/actions/workflows/publish.yml/badge.svg)](https://github.com/iAthman83/21-Days-of-R/actions/workflows/publish.yml)
+Lessons: [CC BY 4.0](LICENSE-CONTENT.md) · Code: [MIT](LICENSE)
+
+## Who it is for
+
+- Complete beginners with no programming background
+- Analysts moving from Excel
+- Students
+
+## How it works
+
+- **One lesson a day**, 1.5 to 3 hours each. The 21 days are a guide, not a deadline.
+- **Every lesson runs in the browser.** Code blocks and exercises use [webR](https://docs.r-wasm.org/webr/latest/) through [Quarto Live](https://r-wasm.github.io/quarto-live/), so R runs on your own device with nothing to install.
+- **Graded exercises.** Every lesson has at least 3 exercises that check your answer, with hints and full solutions, and a "Your turn" challenge with no checker.
+- **Four levels:** Beginner (Days 1–5), Intermediate (Days 6–11), Advanced (Days 12–16) and Expert (Days 17–21).
+
+## The 21 days
+
+| Day | Level | Topic | Run in browser | Source |
+|---|---|---|---|---|
+| 1 | Beginner | Hello, R | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-01-hello-r.html) | [`day-01-hello-r.qmd`](lessons/day-01-hello-r.qmd) |
+| 2 | Beginner | Objects and data types | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-02-objects-and-types.html) | [`day-02-objects-and-types.qmd`](lessons/day-02-objects-and-types.qmd) |
+| 3 | Beginner | Vectors | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-03-vectors.html) | [`day-03-vectors.qmd`](lessons/day-03-vectors.qmd) |
+| 4 | Beginner | Data frames and lists | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-04-data-frames-and-lists.html) | [`day-04-data-frames-and-lists.qmd`](lessons/day-04-data-frames-and-lists.qmd) |
+| 5 | Beginner | Functions and reading data | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-05-functions-and-reading-data.html) | [`day-05-functions-and-reading-data.qmd`](lessons/day-05-functions-and-reading-data.qmd) |
+| 6 | Intermediate | Data wrangling with dplyr | Coming soon |  |
+| 7 | Intermediate | Tidy data with tidyr | Coming soon |  |
+| 8 | Intermediate | Visualisation with ggplot2 | Coming soon |  |
+| 9 | Intermediate | Control flow | Coming soon |  |
+| 10 | Intermediate | Writing your own functions | Coming soon |  |
+| 11 | Intermediate | Strings, dates and factors | Coming soon |  |
+| 12 | Advanced | Iteration with purrr | Coming soon |  |
+| 13 | Advanced | Regular expressions | Coming soon |  |
+| 14 | Advanced | Statistical modelling | Coming soon |  |
+| 15 | Advanced | Reproducible reports with Quarto | Coming soon |  |
+| 16 | Advanced | Debugging and defensive code | Coming soon |  |
+| 17 | Expert | Environments and scoping | Coming soon |  |
+| 18 | Expert | Object-oriented R | Coming soon |  |
+| 19 | Expert | Performance | Coming soon |  |
+| 20 | Expert | Writing an R package | Coming soon |  |
+| 21 | Expert | Capstone project | Coming soon |  |
+
+## Work on your own computer
+
+You can do Days 1–14 in the browser. Days 15, 20 and 21 need R on your computer.
+
+1. Install [R](https://cran.r-project.org) and [RStudio Desktop](https://posit.co/download/rstudio-desktop/).
+2. Install the course packages in the RStudio Console:
+   ```r
+   install.packages(c("tidyverse", "palmerpenguins", "gapminder"))
+   ```
+3. Download this repository (**Code → Download ZIP**) or clone it:
+   ```sh
+   git clone https://github.com/iAthman83/21-Days-of-R.git
+   ```
+4. Open a lesson from the `lessons/` folder in RStudio. Set the working directory to the repository folder so that paths such as `data/household-survey.csv` work.
+
+The [setup guide](https://iathman83.github.io/21-Days-of-R/setup.html) has more detail.
+
+## Repository layout
+
+```
+lessons/           one Quarto file per day
+data/              course datasets and their licences
+tests/             checks that run every example and exercise solution
+_extensions/       the Quarto Live extension (webR)
+_quarto.yml        website configuration
+planning/          tool decision note and syllabus
+```
+
+## Build the site yourself
+
+You need [R](https://cran.r-project.org) and [Quarto](https://quarto.org/docs/get-started/) 1.4 or later.
+
+```sh
+Rscript -e 'install.packages(c("knitr", "rmarkdown", "readr", "palmerpenguins"))'
+Rscript tests/check-lessons.R
+quarto preview
+```
+
+Every push to `main` runs the checks, renders the site and publishes it to GitHub Pages with [GitHub Actions](.github/workflows/publish.yml).
+
+## Contributing
+
+Found a mistake or have an idea for an exercise? Read [CONTRIBUTING.md](CONTRIBUTING.md) or [open an issue](https://github.com/iAthman83/21-Days-of-R/issues).
+
+## Author
+
+Written by **Abubakar Athman**, a software engineer and data specialist who works with R and humanitarian data. More on the [About page](https://iathman83.github.io/21-Days-of-R/about.html). [GitHub](https://github.com/iAthman83) · [LinkedIn](https://www.linkedin.com/in/abubakar-athman) · [YouTube](https://www.youtube.com/@programwithabu)
