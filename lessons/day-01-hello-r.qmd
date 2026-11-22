@@ -1,0 +1,315 @@
+---
+title: "Day 1: Hello, R"
+subtitle: "Run your first code, use R as a calculator and learn to read error messages"
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Beginner · **Time:** about 1.5 hours · **Needs:** nothing, just this browser tab
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Run R code in the browser and change it.
+2. Use R as a calculator, including the order of operations.
+3. Call a function such as `sqrt()` or `round()`.
+4. Read an error message and fix the code.
+5. Find help on any function with `?`.
+
+## What is R?
+
+R is a free programming language for working with data. You write instructions, called **code**, and R carries them out. Analysts use R to clean data, run statistics, draw charts and write reports.
+
+If you use Excel, think of R as a formula bar with no spreadsheet attached. You type `=SUM(A1:A10)` in Excel. In R you type `sum(x)`. The difference is that R keeps every step as text, so you can rerun the whole analysis tomorrow with new data.
+
+## Your first code
+
+The box below is a live R session. Click **Run Code**.
+
+::: {.callout-note}
+The first run takes a few seconds while R loads in your browser. After that, code runs straight away.
+:::
+
+```{webr}
+1 + 1
+```
+
+R printed `[1] 2`. The `2` is the answer. The `[1]` means "this is the first value of the result". You will see why that is useful on Day 3.
+
+Now change the code to `10 * 7` and run it again. You cannot break anything: refresh the page to start over.
+
+## R as a calculator
+
+R uses the same symbols as a calculator:
+
+| Symbol | Meaning | Example | Result |
+|---|---|---|---|
+| `+` | add | `5 + 3` | 8 |
+| `-` | subtract | `5 - 3` | 2 |
+| `*` | multiply | `5 * 3` | 15 |
+| `/` | divide | `5 / 2` | 2.5 |
+| `^` | power | `5 ^ 2` | 25 |
+| `%%` | remainder | `5 %% 2` | 1 |
+
+R follows the normal order of operations: brackets first, then powers, then multiplying and dividing, then adding and subtracting.
+
+```{webr}
+2 + 3 * 4     # multiplication first: 2 + 12
+(2 + 3) * 4   # brackets first: 5 * 4
+```
+
+Everything after `#` is a **comment**. R ignores it. Use comments to explain your code to other people and to your future self.
+
+## Calling functions
+
+A **function** is a named command that does a job. You write its name, then brackets, and put the input inside the brackets.
+
+```{webr}
+sqrt(81)          # square root
+round(3.14159, 2) # round to 2 decimal places
+abs(-12)          # absolute value
+```
+
+`round()` takes two inputs, separated by a comma: the number and the number of decimal places. The inputs are called **arguments**. You will learn more about them on Day 5.
+
+## Text in R
+
+Text goes inside quotation marks. R calls text a **string**.
+
+```{webr}
+"Hello, R"
+toupper("hello, r")
+nchar("Kampala")
+```
+
+`nchar()` counts the characters in a string.
+
+## Reading error messages
+
+Errors are normal. Professional programmers see them all day. The message tells you what went wrong. Run this code:
+
+```{webr}
+sqrt("nine") # Error expected: read the message below
+```
+
+R says `non-numeric argument to mathematical function`. In plain English: "`sqrt()` needs a number, but you gave it text". Fix it by replacing `"nine"` with `9`.
+
+Here are three errors you will meet often:
+
+- `Error: object 'x' not found`: you used a name that R does not know. Check the spelling.
+- `Error: unexpected ')'`: a bracket is missing or extra.
+- `could not find function "squrt"`: the function name is misspelt.
+
+## Getting help
+
+Every function has a help page. In RStudio, type `?` and the function name in the Console:
+
+```r
+?round
+```
+
+Help pages can look dense at first. Read the **Usage** section (how to call the function), the **Arguments** section (what each input means) and the **Examples** at the bottom.
+
+::: {.callout-note}
+## In this browser
+Help pages do not open in the browser version of R. Use `args()` to see a function's arguments, or search for "R round function" online. The full help pages are also at [rdocumentation.org](https://www.rdocumentation.org).
+:::
+
+```{webr}
+args(round)
+```
+
+## Exercises
+
+Each exercise checks your answer when you click **Run Code**. Replace the `______` blanks with your code.
+
+### Exercise 1: Order of operations
+
+A shop sells 3 notebooks at 2,500 shillings each and 2 pens at 800 shillings each. Write one line of code that calculates the total cost.
+
+```{webr}
+#| exercise: ex1_total
+______
+```
+
+::: {.hint exercise="ex1_total"}
+::: {.callout-note collapse="false"}
+## Hint
+Multiply each price by the quantity, then add the two results: `3 * 2500 + ______`.
+:::
+:::
+
+::: {.solution exercise="ex1_total"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+3 * 2500 + 2 * 800
+```
+Multiplication happens before addition, so no brackets are needed. The total is 9,100 shillings.
+:::
+:::
+
+```{webr}
+#| exercise: ex1_total
+#| check: true
+if (!is.numeric(.result)) {
+  list(correct = FALSE, message = "Your answer should be a number. Did you put it in quotes?")
+} else if (isTRUE(all.equal(.result, 9100))) {
+  list(correct = TRUE, message = "Correct: 9,100 shillings.")
+} else if (isTRUE(all.equal(.result, (3 * 2500 + 2) * 800))) {
+  list(correct = FALSE, message = "Check your brackets. Multiply each item by its own price.")
+} else {
+  list(correct = FALSE, message = "Not quite. Work out notebooks and pens separately, then add them.")
+}
+```
+
+### Exercise 2: Use a function
+
+Round the number `2 / 3` to 3 decimal places.
+
+```{webr}
+#| exercise: ex1_round
+round(______, ______)
+```
+
+::: {.hint exercise="ex1_round"}
+::: {.callout-note collapse="false"}
+## Hint
+The first argument is the number to round. The second is how many decimal places you want.
+:::
+:::
+
+::: {.solution exercise="ex1_round"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+round(2 / 3, 3)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex1_round
+#| check: true
+if (isTRUE(all.equal(.result, 0.667))) {
+  list(correct = TRUE, message = "Correct: 0.667.")
+} else if (isTRUE(all.equal(.result, round(2 / 3)))) {
+  list(correct = FALSE, message = "You rounded to 0 decimal places. Add the number of digits as the second argument.")
+} else {
+  list(correct = FALSE, message = "Not quite. You should get 0.667.")
+}
+```
+
+### Exercise 3: Fix the error
+
+This code should give the square root of 144, but it has an error. Run it, read the message, then fix it.
+
+```{webr}
+#| exercise: ex1_fix
+squrt(144)
+```
+
+::: {.hint exercise="ex1_fix"}
+::: {.callout-note collapse="false"}
+## Hint
+The error says `could not find function`. Check the spelling of the function name against the examples above.
+:::
+:::
+
+::: {.solution exercise="ex1_fix"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+sqrt(144)
+```
+The function is called `sqrt`, short for "square root".
+:::
+:::
+
+```{webr}
+#| exercise: ex1_fix
+#| check: true
+if (isTRUE(all.equal(.result, 12))) {
+  list(correct = TRUE, message = "Fixed. The square root of 144 is 12.")
+} else {
+  list(correct = FALSE, message = "The answer should be 12. Check the function name.")
+}
+```
+
+### Exercise 4: Count characters
+
+How many characters are in the word `"Mbarara"`? Use a function to find out.
+
+```{webr}
+#| exercise: ex1_nchar
+______("Mbarara")
+```
+
+::: {.hint exercise="ex1_nchar"}
+::: {.callout-note collapse="false"}
+## Hint
+Look at the "Text in R" section. One function counts characters.
+:::
+:::
+
+::: {.solution exercise="ex1_nchar"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+nchar("Mbarara")
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex1_nchar
+#| check: true
+if (identical(as.integer(.result), 7L)) {
+  list(correct = TRUE, message = "Correct: 7 characters.")
+} else {
+  list(correct = FALSE, message = "Not quite. Use nchar().")
+}
+```
+
+## Your turn
+
+There is no answer checker for this one. Use the box below.
+
+1. Work out how many seconds there are in a year (365 days).
+2. Try `signif(123456, 2)` and `round(123456, 2)`. How is `signif()` different from `round()`? Check its arguments with `args(signif)`.
+3. Write a deliberate mistake, read the error, then fix it.
+
+```{webr}
+# Your code here
+
+```
+
+## Run R on your own computer
+
+You can finish Days 1 to 14 in the browser. When you want to work on your own data, follow the [setup guide](../setup.qmd) to install R and RStudio. Everything you learnt today works the same way in the RStudio **Console**.
+
+## Common mistakes
+
+- **Typing the `[1]`.** It is part of R's output, not part of the code.
+- **Forgetting the closing bracket.** In RStudio, a `+` at the start of the line means R is waiting for you to finish. Type the missing `)` or press Esc.
+- **Using curly quotes.** Code copied from a word processor may have “curly” quotes. R needs straight quotes: `"` or `'`.
+- **Capital letters.** R is case-sensitive. `Sqrt(9)` fails. `sqrt(9)` works.
+
+## Summary
+
+- R carries out code and prints the result. `[1]` marks the first value.
+- R follows the normal order of operations. Use brackets to make the order clear.
+- A function has a name and brackets: `round(3.14159, 2)`. Its inputs are arguments.
+- Text goes inside quotes.
+- Error messages tell you what is wrong. Read them, then fix the code.
+- `?function_name` opens the help page.
+
+**Tomorrow:** you will save values with names, so you can reuse them.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 3: Workflow basics](https://r4ds.hadley.nz/workflow-basics), by Hadley Wickham, Mine Çetinkaya-Rundel and Garrett Grolemund. Free online.
+- [An Introduction to R](https://cran.r-project.org/doc/manuals/r-release/R-intro.html), the official R manual. Sections 1 and 2.

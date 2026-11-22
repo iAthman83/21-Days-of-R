@@ -1,0 +1,401 @@
+---
+title: "Day 5: Functions and reading data"
+subtitle: "Understand how functions take arguments, use packages and read your own data from CSV files"
+webr:
+  packages:
+    - readr
+  resources:
+    - ../data/household-survey.csv
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Beginner · **Time:** about 2 hours · **Needs:** [Day 4](day-04-data-frames-and-lists.qmd) · **Packages:** readr · **Data:** `data/household-survey.csv`
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Call a function with arguments by position and by name, and use default values.
+2. Read a function's arguments from its help page or with `args()`.
+3. Install and load a package, and call a function with `package::function()`.
+4. Read a CSV file with `read.csv()` and `readr::read_csv()`.
+5. Check imported data and save results to a new CSV file.
+
+## How functions take arguments
+
+You have used many functions already. Today you will look at how they work. Here is `seq()`:
+
+```{webr}
+args(seq.default)
+```
+
+Each name before `=` is an **argument**. Values after `=` are **defaults**: R uses them if you do not give a value.
+
+### By position or by name
+
+You can give arguments in the order R expects, or by name in any order:
+
+```{webr}
+seq(0, 20, 5)                       # by position: from, to, by
+seq(from = 0, to = 20, by = 5)      # by name: clearer
+seq(to = 20, by = 5, from = 0)      # by name, any order
+seq(0, 1, length.out = 5)           # mix: first two by position, then by name
+```
+
+A good habit: give the first one or two arguments by position, and the rest by name. `round(x, digits = 2)` is easier to read than `round(x, 2)`.
+
+### Defaults
+
+`round()` has a default of `digits = 0`. `mean()` has a default of `na.rm = FALSE`, which is why you had to write `na.rm = TRUE` on Day 3.
+
+```{webr}
+round(3.14159)              # uses the default digits = 0
+round(3.14159, digits = 3)
+```
+
+### Nesting functions
+
+The result of one function can be the input of another. R works from the inside out:
+
+```{webr}
+incomes <- c(120000, 450000, NA, 310000)
+round(mean(incomes, na.rm = TRUE), digits = -3)   # round to the nearest thousand
+```
+
+Deeply nested code is hard to read. On Day 6 you will learn the pipe `|>`, which lets you write the same steps from left to right.
+
+## Packages
+
+A **package** is a collection of functions written by other R users. Thousands are free on CRAN, the main R package archive.
+
+1. **Install** a package once on your computer: `install.packages("readr")`.
+2. **Load** it in every session where you use it: `library(readr)`.
+
+```{webr}
+library(readr)
+```
+
+::: {.callout-note}
+## In this browser
+The packages each lesson needs are installed for you when the page loads. On your own computer, run `install.packages()` once per package.
+:::
+
+You can also call a function without loading its package, by writing `package::function()`. This makes it clear where a function comes from:
+
+```{webr}
+readr::parse_number("UGX 450,000")
+```
+
+## Reading a CSV file
+
+A **CSV** (comma-separated values) file is a plain-text table. Excel, Kobo, ODK and most other tools can export one. It is the most common way to get data into R.
+
+This lesson uses a small, made-up household survey in `data/household-survey.csv`.
+
+### With base R: `read.csv()`
+
+```{webr}
+survey <- read.csv("data/household-survey.csv")
+head(survey)
+str(survey)
+```
+
+### With readr: `read_csv()`
+
+`read_csv()` from the readr package is faster on large files. It also reports the type it chose for each column, and it recognises dates automatically:
+
+```{webr}
+survey2 <- read_csv("data/household-survey.csv")
+survey2
+```
+
+Notice that `interview_date` is a `date` column in `survey2` but a character column in `survey`. You will work with dates on Day 11.
+
+::: {.callout-tip}
+## Excel bridge
+To export a sheet from Excel, choose **File > Save As** and pick **CSV UTF-8**. The `readxl` package can also read `.xlsx` files directly with `read_excel()`.
+:::
+
+### File paths
+
+`"data/household-survey.csv"` is a **relative path**: R looks for a `data` folder inside its **working directory**. Check the working directory with `getwd()` and the files in it with `list.files()`:
+
+```{webr}
+getwd()
+list.files("data")
+```
+
+If R says `cannot open file ... No such file or directory`, the path does not match where the file is. Check the spelling, the folder and the working directory. In RStudio, working inside an **R Project** sets the working directory for you.
+
+## Checking imported data
+
+Always check data after you import it. Ask four questions:
+
+```{webr}
+dim(survey)                                # 1. Did all the rows and columns arrive?
+sapply(survey, class)                      # 2. Does each column have the right type?
+colSums(is.na(survey))                     # 3. How many values are missing in each column?
+table(survey$district)                     # 4. Do the categories look right?
+```
+
+## Saving results
+
+Write a data frame to a new CSV file with `write.csv()` or `readr::write_csv()`:
+
+```{webr}
+large <- survey[survey$household_size >= 7, ]
+write_csv(large, "large-households.csv")
+file.exists("large-households.csv")
+```
+
+## Exercises
+
+### Exercise 1: Arguments by name
+
+Create a sequence from 10 to 100 in steps of 15, giving **all three** arguments by name.
+
+```{webr}
+#| exercise: ex5_seq
+seq(from = ______, to = ______, by = ______)
+```
+
+::: {.hint exercise="ex5_seq"}
+::: {.callout-note collapse="false"}
+## Hint
+`from` is where the sequence starts, `to` is where it stops and `by` is the step size.
+:::
+:::
+
+::: {.solution exercise="ex5_seq"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+seq(from = 10, to = 100, by = 15)
+```
+The sequence stops at 100 because the next value, 115, would go past `to`.
+:::
+:::
+
+```{webr}
+#| exercise: ex5_seq
+#| check: true
+if (isTRUE(all.equal(.result, seq(10, 100, by = 15)))) {
+  list(correct = TRUE, message = "Correct: 10, 25, 40, 55, 70, 85, 100.")
+} else {
+  list(correct = FALSE, message = "You should get 7 values, from 10 to 100.")
+}
+```
+
+### Exercise 2: Read a CSV file
+
+Read `data/household-survey.csv` into an object called `hh`, then count its rows.
+
+```{webr}
+#| exercise: ex5_read
+hh <- ______("data/household-survey.csv")
+nrow(hh)
+```
+
+::: {.hint exercise="ex5_read"}
+::: {.callout-note collapse="false"}
+## Hint
+Use `read.csv()` or `read_csv()`. The path is already written for you.
+:::
+:::
+
+::: {.solution exercise="ex5_read"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+hh <- read.csv("data/household-survey.csv")
+nrow(hh)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex5_read
+#| check: true
+if (!exists("hh") || !is.data.frame(hh)) {
+  list(correct = FALSE, message = "Read the file into an object called hh.")
+} else if (identical(as.integer(.result), 40L)) {
+  list(correct = TRUE, message = "Correct: 40 households.")
+} else {
+  list(correct = FALSE, message = "hh exists. The last line should count its rows with nrow().")
+}
+```
+
+### Exercise 3: Find missing values
+
+How many values are missing in the `monthly_income_ugx` column?
+
+```{webr}
+#| exercise: ex5_na
+#| setup: true
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex5_na
+sum(______(hh$monthly_income_ugx))
+```
+
+::: {.hint exercise="ex5_na"}
+::: {.callout-note collapse="false"}
+## Hint
+The function that tests for missing values gives `TRUE` for each one. `sum()` then counts them.
+:::
+:::
+
+::: {.solution exercise="ex5_na"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+sum(is.na(hh$monthly_income_ugx))
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex5_na
+#| check: true
+if (identical(as.integer(.result), 3L)) {
+  list(correct = TRUE, message = "Correct: 3 missing incomes.")
+} else {
+  list(correct = FALSE, message = "Use is.na() inside sum().")
+}
+```
+
+### Exercise 4: Nest functions
+
+Calculate the average monthly income, ignoring missing values, and round it to the **nearest thousand** shillings.
+
+```{webr}
+#| exercise: ex5_nest
+#| setup: true
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex5_nest
+round(mean(______, na.rm = TRUE), digits = ______)
+```
+
+::: {.hint exercise="ex5_nest"}
+::: {.callout-note collapse="false"}
+## Hint
+Negative values of `digits` round to the left of the decimal point. `digits = -1` rounds to the nearest 10, and `digits = -2` to the nearest 100.
+:::
+:::
+
+::: {.solution exercise="ex5_nest"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+round(mean(hh$monthly_income_ugx, na.rm = TRUE), digits = -3)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex5_nest
+#| check: true
+target <- round(mean(hh$monthly_income_ugx, na.rm = TRUE), digits = -3)
+if (isTRUE(all.equal(.result, target))) {
+  list(correct = TRUE, message = sprintf("Correct: %s shillings.", format(target, big.mark = ",")))
+} else if (is.na(.result)) {
+  list(correct = FALSE, message = "You got NA. Keep na.rm = TRUE inside mean().")
+} else {
+  list(correct = FALSE, message = "Round to the nearest thousand with digits = -3.")
+}
+```
+
+### Exercise 5: Filter and count
+
+How many households in **Gulu** have water (`has_water` is `"yes"`)?
+
+```{webr}
+#| exercise: ex5_filter
+#| setup: true
+hh <- read.csv("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex5_filter
+gulu_water <- hh[______ & ______, ]
+nrow(gulu_water)
+```
+
+::: {.hint exercise="ex5_filter"}
+::: {.callout-note collapse="false"}
+## Hint
+You need two conditions joined by `&`: one on `hh$district` and one on `hh$has_water`. Both are text, so use quotes.
+:::
+:::
+
+::: {.solution exercise="ex5_filter"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+gulu_water <- hh[hh$district == "Gulu" & hh$has_water == "yes", ]
+nrow(gulu_water)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex5_filter
+#| check: true
+target <- sum(hh$district == "Gulu" & hh$has_water == "yes")
+if (identical(as.integer(.result), as.integer(target))) {
+  list(correct = TRUE, message = sprintf("Correct: %d households.", target))
+} else if (identical(as.integer(.result), sum(hh$district == "Gulu"))) {
+  list(correct = FALSE, message = "That is every household in Gulu. Add the condition on has_water.")
+} else {
+  list(correct = FALSE, message = "Check both conditions and the spelling of \"Gulu\" and \"yes\".")
+}
+```
+
+## Your turn
+
+1. Export a small table from Excel or Google Sheets as CSV. On your own computer, read it into R and check it with the four questions above.
+2. In the survey data, which district has the largest average household size? Try `tapply(hh$household_size, hh$district, mean)`.
+3. Save only the households with no water to a new file called `no-water.csv`.
+
+```{webr}
+hh <- read.csv("data/household-survey.csv")
+# Your code here
+
+```
+
+## Level 1 complete
+
+You have finished the Beginner level. You can now run R code, store values, work with vectors and data frames, and read your own data. From Day 6 you will learn the tidyverse, the set of packages most R analysts use every day.
+
+## Common mistakes
+
+- **Forgetting `library()`.** `could not find function "read_csv"` usually means the package is not loaded.
+- **Using `install.packages()` in every script.** Install once. Load with `library()` in every session.
+- **The wrong working directory.** If R cannot find a file, check `getwd()` and the path.
+- **Backslashes in Windows paths.** Write `"C:/data/file.csv"` or `"C:\\data\\file.csv"`, not `"C:\data\file.csv"`.
+- **Not checking imported data.** A column of numbers read as text, or a missing row, will break later steps without a clear error.
+
+## Summary
+
+- Functions take arguments by position or by name. Defaults apply when you leave an argument out.
+- `args()` and `?` show a function's arguments.
+- Install a package once with `install.packages()`. Load it each session with `library()`. `pkg::fun()` calls a function without loading the package.
+- Read CSV files with `read.csv()` or `readr::read_csv()`. Paths are relative to the working directory.
+- Check imported data: rows and columns, types, missing values and categories.
+- Save results with `write.csv()` or `readr::write_csv()`.
+
+**Next:** Level 2 starts on Day 6 with data wrangling in dplyr.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 7: Data import](https://r4ds.hadley.nz/data-import).
+- [readr documentation](https://readr.tidyverse.org/).
+- [R for Data Science (2e), chapter 6: Workflow: scripts and projects](https://r4ds.hadley.nz/workflow-scripts) (working directories and R Projects).

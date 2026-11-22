@@ -1,0 +1,379 @@
+---
+title: "Day 2: Objects and data types"
+subtitle: "Save values with names, tell data types apart and handle missing values"
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Beginner · **Time:** about 2 hours · **Needs:** [Day 1](day-01-hello-r.qmd)
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Save a value in an object with `<-` and use it later.
+2. Choose good object names.
+3. Tell the four basic data types apart: numeric, character, logical and factor.
+4. Convert a value from one type to another.
+5. Recognise missing values (`NA`) and work around them.
+
+## Saving values in objects
+
+On Day 1 every result disappeared as soon as R printed it. To keep a value, give it a name with the **assignment arrow** `<-`:
+
+```{webr}
+price <- 2500
+price
+```
+
+Read `<-` as "gets": "`price` gets 2500". The name `price` now points to the value 2500. R calls this an **object**. You can use it anywhere you would use the number:
+
+```{webr}
+price * 3
+total <- price * 3 + 800
+total
+```
+
+If you assign a new value to the same name, the old one is replaced:
+
+```{webr}
+price <- 3000
+price
+```
+
+::: {.callout-tip}
+## Excel bridge
+An object is like a named cell. In Excel you might name cell B2 `price` and write `=price*3`. In R you write `price * 3`. The difference is that R objects can hold far more than one number, as you will see tomorrow.
+:::
+
+### Naming rules
+
+- Names can contain letters, numbers, `.` and `_`, but must start with a letter.
+- R is case-sensitive: `Price` and `price` are different objects.
+- Use names that say what the value is: `monthly_rent` is better than `x2`.
+- Most R users write names in `snake_case`: lower-case words joined by `_`.
+
+## The four basic data types
+
+Every value in R has a type. The type decides what you can do with it. Use `class()` to check:
+
+```{webr}
+class(42.5)        # numeric: numbers
+class("Kampala")   # character: text
+class(TRUE)        # logical: TRUE or FALSE
+```
+
+### Numeric
+
+Numbers, with or without decimals. You can do maths with them.
+
+### Character
+
+Text, always written inside quotes. You cannot do maths with text, even if it looks like a number:
+
+```{webr}
+"5" + 1 # Error expected: "5" is text, not a number
+```
+
+### Logical
+
+Only two values: `TRUE` and `FALSE`. You get logical values when you compare things:
+
+```{webr}
+10 > 3
+10 == 3     # == means "is equal to". A single = is not a comparison.
+10 != 3     # != means "is not equal to"
+"a" == "a"
+```
+
+Logical values are the basis of filtering data, which you will do from Day 3 onwards.
+
+### Factor
+
+A factor is a category with a fixed set of possible values, called **levels**. Survey answers such as "Agree", "Neutral" and "Disagree" are a typical example.
+
+```{webr}
+answer <- factor("Agree", levels = c("Disagree", "Neutral", "Agree"))
+answer
+levels(answer)
+```
+
+You will use factors much more on Day 11. For now, recognise one when you see it.
+
+## Converting between types
+
+Data often arrives with the wrong type. A number read from a file may be stored as text. Convert it with an `as.` function:
+
+```{webr}
+as.numeric("5") + 1
+as.character(2026)
+as.logical("TRUE")
+```
+
+If R cannot convert a value, it gives `NA` and a warning:
+
+```{webr}
+as.numeric("five")
+```
+
+## Missing values: NA
+
+`NA` means "not available": the value is missing. It is not zero and it is not blank. It means "unknown".
+
+Anything calculated from an unknown value is also unknown:
+
+```{webr}
+NA + 10
+NA > 5
+```
+
+Use `is.na()` to test for a missing value. You cannot use `== NA`, because the answer to "is this unknown thing equal to an unknown thing?" is also unknown:
+
+```{webr}
+age <- NA
+age == NA    # gives NA, not TRUE
+is.na(age)   # the right way
+```
+
+Many functions have an argument `na.rm = TRUE` ("remove NAs") that skips missing values. You will use it on Day 3.
+
+## Exercises
+
+### Exercise 1: Create and use objects
+
+A household spends 450,000 shillings a month on rent. Create an object called `rent` with that value. Then calculate the cost for a whole year.
+
+```{webr}
+#| exercise: ex2_rent
+rent <- ______
+rent * ______
+```
+
+::: {.hint exercise="ex2_rent"}
+::: {.callout-note collapse="false"}
+## Hint
+Put the number after `<-`. A year has 12 months.
+:::
+:::
+
+::: {.solution exercise="ex2_rent"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+rent <- 450000
+rent * 12
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex2_rent
+#| check: true
+if (!exists("rent")) {
+  list(correct = FALSE, message = "Create an object called rent with <-.")
+} else if (!isTRUE(all.equal(rent, 450000))) {
+  list(correct = FALSE, message = "rent should be 450000. Do not use commas inside numbers in R.")
+} else if (isTRUE(all.equal(.result, 5400000))) {
+  list(correct = TRUE, message = "Correct: 5,400,000 shillings a year.")
+} else {
+  list(correct = FALSE, message = "rent is right. Now multiply it by the number of months in a year.")
+}
+```
+
+### Exercise 2: Check the type
+
+What type is the value `"2026"`? Use a function to find out.
+
+```{webr}
+#| exercise: ex2_class
+______("2026")
+```
+
+::: {.hint exercise="ex2_class"}
+::: {.callout-note collapse="false"}
+## Hint
+The function that reports a type is `class()`. Notice the quotes around `2026`.
+:::
+:::
+
+::: {.solution exercise="ex2_class"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+class("2026")
+```
+It is `"character"`. The quotes make it text, even though it looks like a number.
+:::
+:::
+
+```{webr}
+#| exercise: ex2_class
+#| check: true
+if (identical(.result, "character")) {
+  list(correct = TRUE, message = "Right. The quotes make it text.")
+} else {
+  list(correct = FALSE, message = "Use class() on the value exactly as written, with the quotes.")
+}
+```
+
+### Exercise 3: Fix the type
+
+The object `score` came from a file and is stored as text. Convert it to a number, then add 10.
+
+```{webr}
+#| exercise: ex2_convert
+#| setup: true
+score <- "85"
+```
+
+```{webr}
+#| exercise: ex2_convert
+______(score) + 10
+```
+
+::: {.hint exercise="ex2_convert"}
+::: {.callout-note collapse="false"}
+## Hint
+The `as.` function for numbers is `as.numeric()`.
+:::
+:::
+
+::: {.solution exercise="ex2_convert"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+as.numeric(score) + 10
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex2_convert
+#| check: true
+if (isTRUE(all.equal(.result, 95))) {
+  list(correct = TRUE, message = "Correct: 95.")
+} else {
+  list(correct = FALSE, message = "Convert score with as.numeric() before adding 10.")
+}
+```
+
+### Exercise 4: Compare values
+
+Is `budget` greater than or equal to `cost`? Write a comparison that answers `TRUE` or `FALSE`.
+
+```{webr}
+#| exercise: ex2_compare
+#| setup: true
+budget <- 120000
+cost <- 118500
+```
+
+```{webr}
+#| exercise: ex2_compare
+budget ______ cost
+```
+
+::: {.hint exercise="ex2_compare"}
+::: {.callout-note collapse="false"}
+## Hint
+"Greater than or equal to" is written `>=`.
+:::
+:::
+
+::: {.solution exercise="ex2_compare"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+budget >= cost
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex2_compare
+#| check: true
+if (identical(.result, TRUE)) {
+  list(correct = TRUE, message = "Correct. The budget covers the cost.")
+} else {
+  list(correct = FALSE, message = "You should get TRUE. Use >= between the two objects.")
+}
+```
+
+### Exercise 5: Test for a missing value
+
+The object `income` may be missing. Write code that returns `TRUE` if it is missing.
+
+```{webr}
+#| exercise: ex2_na
+#| setup: true
+income <- NA
+```
+
+```{webr}
+#| exercise: ex2_na
+______(income)
+```
+
+::: {.hint exercise="ex2_na"}
+::: {.callout-note collapse="false"}
+## Hint
+`income == NA` does not work. There is a special function for this.
+:::
+:::
+
+::: {.solution exercise="ex2_na"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+is.na(income)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex2_na
+#| check: true
+if (identical(.result, TRUE)) {
+  list(correct = TRUE, message = "Correct. Always use is.na() to find missing values.")
+} else if (identical(.result, NA)) {
+  list(correct = FALSE, message = "You got NA. That happens with == NA. Use is.na() instead.")
+} else {
+  list(correct = FALSE, message = "Use is.na() on income.")
+}
+```
+
+## Your turn
+
+1. Create objects for your own monthly income and three monthly costs. Calculate what is left at the end of the month.
+2. Is what is left more than 10% of your income? Write the comparison.
+3. Try `class(TRUE + TRUE)`. What happens, and why might R treat `TRUE` as 1?
+
+```{webr}
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Using `=` to compare.** `x = 5` assigns. `x == 5` compares.
+- **Commas in numbers.** Write `450000`, not `450,000`. R reads the comma as a separator.
+- **Quotes around numbers.** `"85"` is text. You cannot do maths with it until you convert it.
+- **Testing for missing values with `==`.** Use `is.na(x)`.
+- **Spaces inside the arrow.** `x < - 5` means "is x less than minus 5?". Write `x <- 5`.
+
+## Summary
+
+- `<-` saves a value in an object: `price <- 2500`.
+- Good names are short, clear and in `snake_case`.
+- The basic types are numeric, character (text), logical (`TRUE`/`FALSE`) and factor (categories). Check a type with `class()`.
+- Convert types with `as.numeric()`, `as.character()` and `as.logical()`.
+- `NA` is a missing value. Test for it with `is.na()`.
+
+**Tomorrow:** you will store many values in one object, called a vector.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 3: Workflow basics](https://r4ds.hadley.nz/workflow-basics) (naming and assignment).
+- [Hands-On Programming with R, chapter 5: R objects](https://rstudio-education.github.io/hopr/r-objects.html), by Garrett Grolemund. Free online.

@@ -1,0 +1,393 @@
+---
+title: "Day 3: Vectors"
+subtitle: "Store many values in one object, pick out the ones you need and calculate with all of them at once"
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Beginner · **Time:** about 2 hours · **Needs:** [Day 2](day-02-objects-and-types.qmd)
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Create vectors with `c()`, `:`, `seq()` and `rep()`.
+2. Calculate with a whole vector at once.
+3. Summarise a vector with `sum()`, `mean()`, `max()` and similar functions, including when values are missing.
+4. Pick out values by position, by name and by a condition.
+5. Explain why every value in a vector has the same type.
+
+## What is a vector?
+
+A **vector** is a sequence of values of the same type. It is the most important structure in R. Even a single number is a vector of length 1, which is why R prints `[1]` in front of it.
+
+Create a vector with `c()`, which stands for "combine":
+
+```{webr}
+household_size <- c(4, 6, 2, 7, 5, 3)
+household_size
+length(household_size)
+```
+
+::: {.callout-tip}
+## Excel bridge
+A vector is like a single column in a spreadsheet. Tomorrow you will put several vectors side by side to make a table.
+:::
+
+### Other ways to make vectors
+
+```{webr}
+1:10                          # whole numbers from 1 to 10
+seq(0, 100, by = 25)          # from 0 to 100 in steps of 25
+rep("Yes", times = 3)         # repeat a value
+c("Gulu", "Arua", "Mbale")    # character vector
+```
+
+## Calculating with vectors
+
+Arithmetic on a vector applies to every value. This is called **vectorisation**, and it is why R code is often short.
+
+```{webr}
+prices_ugx <- c(2500, 800, 12000, 4500)
+prices_ugx * 1.18             # add 18% VAT to every price
+prices_ugx / 3800             # convert every price to US dollars
+```
+
+Two vectors of the same length are combined value by value:
+
+```{webr}
+quantity <- c(3, 2, 1, 4)
+prices_ugx * quantity         # cost of each line
+```
+
+## Summary functions
+
+These functions take a whole vector and return one value:
+
+```{webr}
+sum(household_size)
+mean(household_size)
+median(household_size)
+min(household_size)
+max(household_size)
+sd(household_size)            # standard deviation
+```
+
+### When values are missing
+
+If any value is `NA`, the summary is `NA` too. Add `na.rm = TRUE` to leave missing values out:
+
+```{webr}
+ages <- c(34, NA, 27, 41, NA, 19)
+mean(ages)
+mean(ages, na.rm = TRUE)
+sum(is.na(ages))              # how many values are missing?
+```
+
+`sum(is.na(ages))` works because `is.na()` gives `TRUE` or `FALSE` for each value, and R counts `TRUE` as 1 and `FALSE` as 0.
+
+## Picking out values (indexing)
+
+Use square brackets `[ ]` to pick values from a vector.
+
+### By position
+
+```{webr}
+towns <- c("Gulu", "Arua", "Mbale", "Jinja", "Lira")
+towns[1]          # the first value. R counts from 1, not 0.
+towns[c(2, 4)]    # the second and fourth values
+towns[2:4]        # the second to the fourth
+towns[-1]         # everything except the first
+```
+
+### By name
+
+You can give each value a name, then pick values by name:
+
+```{webr}
+population <- c(Gulu = 150000, Arua = 72000, Mbale = 97000)
+population["Arua"]
+names(population)
+```
+
+### By a condition
+
+This is the most useful kind of indexing. Write a comparison inside the brackets, and R keeps the values where the answer is `TRUE`:
+
+```{webr}
+household_size > 4                    # TRUE/FALSE for each value
+household_size[household_size > 4]    # keep only those values
+```
+
+Combine conditions with `&` (and) and `|` (or):
+
+```{webr}
+household_size[household_size >= 3 & household_size <= 5]
+towns[towns == "Gulu" | towns == "Lira"]
+towns[towns %in% c("Gulu", "Lira")]   # shorter way to write the line above
+```
+
+::: {.callout-tip}
+## Excel bridge
+Indexing by a condition does the same job as a filter on an Excel column.
+:::
+
+## One type per vector
+
+A vector can hold only one type. If you mix types, R converts everything to the most flexible one, usually character:
+
+```{webr}
+mixed <- c(1, "two", 3)
+mixed
+class(mixed)
+```
+
+The numbers have become text. This is called **coercion**. It often explains surprising results when you import data: a single text value in a column of numbers turns the whole column into text.
+
+## Exercises
+
+### Exercise 1: Create a vector
+
+Create a vector called `rainfall` with these monthly rainfall values in millimetres: 120, 85, 60, 140, 175. Then calculate the total.
+
+```{webr}
+#| exercise: ex3_create
+rainfall <- ______
+sum(rainfall)
+```
+
+::: {.hint exercise="ex3_create"}
+::: {.callout-note collapse="false"}
+## Hint
+Use `c()` and put commas between the values.
+:::
+:::
+
+::: {.solution exercise="ex3_create"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+rainfall <- c(120, 85, 60, 140, 175)
+sum(rainfall)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex3_create
+#| check: true
+if (!exists("rainfall") || length(rainfall) != 5) {
+  list(correct = FALSE, message = "rainfall should contain 5 values.")
+} else if (!isTRUE(all.equal(rainfall, c(120, 85, 60, 140, 175)))) {
+  list(correct = FALSE, message = "Check the values in rainfall.")
+} else if (isTRUE(all.equal(.result, 580))) {
+  list(correct = TRUE, message = "Correct: 580 mm in total.")
+} else {
+  list(correct = FALSE, message = "rainfall is right. The last line should give its sum.")
+}
+```
+
+### Exercise 2: Vectorised maths
+
+Temperatures are recorded in Celsius. Convert all of them to Fahrenheit using the formula *F = C × 9 / 5 + 32*.
+
+```{webr}
+#| exercise: ex3_temp
+#| setup: true
+celsius <- c(18, 22, 25, 29, 31)
+```
+
+```{webr}
+#| exercise: ex3_temp
+______
+```
+
+::: {.hint exercise="ex3_temp"}
+::: {.callout-note collapse="false"}
+## Hint
+You do not need a loop. Write the formula once, using `celsius` in place of *C*.
+:::
+:::
+
+::: {.solution exercise="ex3_temp"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+celsius * 9 / 5 + 32
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex3_temp
+#| check: true
+if (isTRUE(all.equal(.result, celsius * 9 / 5 + 32))) {
+  list(correct = TRUE, message = "Correct. One line converts every value.")
+} else {
+  list(correct = FALSE, message = "You should get 5 values, starting with 64.4.")
+}
+```
+
+### Exercise 3: Mean with missing values
+
+Some test scores are missing. Calculate the average of the scores you have.
+
+```{webr}
+#| exercise: ex3_mean
+#| setup: true
+scores <- c(72, 85, NA, 64, 90, NA, 78)
+```
+
+```{webr}
+#| exercise: ex3_mean
+mean(scores, ______)
+```
+
+::: {.hint exercise="ex3_mean"}
+::: {.callout-note collapse="false"}
+## Hint
+Add the argument that removes `NA` values before calculating.
+:::
+:::
+
+::: {.solution exercise="ex3_mean"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+mean(scores, na.rm = TRUE)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex3_mean
+#| check: true
+if (isTRUE(all.equal(.result, 77.8))) {
+  list(correct = TRUE, message = "Correct: 77.8.")
+} else if (identical(.result, NA_real_)) {
+  list(correct = FALSE, message = "You got NA. Add na.rm = TRUE.")
+} else {
+  list(correct = FALSE, message = "Not quite. The answer is 77.8.")
+}
+```
+
+### Exercise 4: Index by position
+
+Get the **last three** towns from the vector `towns`.
+
+```{webr}
+#| exercise: ex3_position
+#| setup: true
+towns <- c("Gulu", "Arua", "Mbale", "Jinja", "Lira", "Hoima")
+```
+
+```{webr}
+#| exercise: ex3_position
+towns[______]
+```
+
+::: {.hint exercise="ex3_position"}
+::: {.callout-note collapse="false"}
+## Hint
+There are 6 towns. The last three are at positions 4, 5 and 6. Use `:` to write a range.
+:::
+:::
+
+::: {.solution exercise="ex3_position"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+towns[4:6]
+```
+A version that works for any length is `towns[(length(towns) - 2):length(towns)]`.
+:::
+:::
+
+```{webr}
+#| exercise: ex3_position
+#| check: true
+if (identical(.result, c("Jinja", "Lira", "Hoima"))) {
+  list(correct = TRUE, message = "Correct.")
+} else {
+  list(correct = FALSE, message = "You should get Jinja, Lira and Hoima, in that order.")
+}
+```
+
+### Exercise 5: Filter with a condition
+
+Keep only the households with **more than 5** members.
+
+```{webr}
+#| exercise: ex3_filter
+#| setup: true
+household_size <- c(4, 6, 2, 7, 5, 3, 9, 1)
+```
+
+```{webr}
+#| exercise: ex3_filter
+household_size[______]
+```
+
+::: {.hint exercise="ex3_filter"}
+::: {.callout-note collapse="false"}
+## Hint
+Put a comparison inside the brackets: `household_size > ______`.
+:::
+:::
+
+::: {.solution exercise="ex3_filter"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+household_size[household_size > 5]
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex3_filter
+#| check: true
+if (isTRUE(all.equal(.result, c(6, 7, 9)))) {
+  list(correct = TRUE, message = "Correct: 6, 7 and 9.")
+} else if (isTRUE(all.equal(.result, c(6, 7, 5, 9)))) {
+  list(correct = FALSE, message = "You included 5. 'More than 5' means > 5, not >= 5.")
+} else {
+  list(correct = FALSE, message = "You should get 6, 7 and 9.")
+}
+```
+
+## Your turn
+
+1. Make a vector of what you spent each day last week (7 values). Find the total, the average and the most expensive day.
+2. Give the vector names (`Mon`, `Tue` and so on) with `names(x) <- c(...)`. Which days were above your average?
+3. What does `rev(1:5)` do? What about `sort(c(3, 1, 2), decreasing = TRUE)`?
+
+```{webr}
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Forgetting `c()`.** `mean(1, 2, 3)` gives 1, because `mean()` only reads the first argument as the data. Write `mean(c(1, 2, 3))`.
+- **Counting from 0.** The first value is `x[1]`. `x[0]` gives an empty vector.
+- **Forgetting `na.rm = TRUE`.** A single `NA` makes `sum()` and `mean()` return `NA`.
+- **Writing `x > 3 & < 8`.** Repeat the object: `x > 3 & x < 8`.
+- **Mixing types by accident.** One text value turns a whole vector into text. Check with `class()`.
+
+## Summary
+
+- A vector holds many values of one type. Create one with `c()`, `:`, `seq()` or `rep()`.
+- Maths on a vector applies to every value at once.
+- `sum()`, `mean()`, `median()`, `min()`, `max()` and `sd()` summarise a vector. Use `na.rm = TRUE` to skip missing values.
+- Pick values with `[ ]`: by position (`x[2]`), by name (`x["Gulu"]`) or by a condition (`x[x > 5]`).
+- Combine conditions with `&` and `|`. Use `%in%` to match against a list of values.
+
+**Tomorrow:** you will put vectors side by side to make data frames, the R version of a spreadsheet table.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 12: Logical vectors](https://r4ds.hadley.nz/logicals).
+- [Hands-On Programming with R, chapter 7: R notation](https://rstudio-education.github.io/hopr/r-notation.html) (indexing).

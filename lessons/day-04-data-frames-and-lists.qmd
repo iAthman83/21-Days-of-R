@@ -1,0 +1,434 @@
+---
+title: "Day 4: Data frames and lists"
+subtitle: "Work with tables of data, and with lists that hold anything"
+webr:
+  packages:
+    - palmerpenguins
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Beginner · **Time:** about 2.5 hours · **Needs:** [Day 3](day-03-vectors.qmd) · **Packages:** palmerpenguins
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Create a data frame from vectors.
+2. Inspect a data frame with `str()`, `head()`, `summary()`, `nrow()` and `ncol()`.
+3. Pick out columns with `$` and `[ ]`.
+4. Pick out rows by position and by a condition.
+5. Add a new column.
+6. Create a list and get values out of it.
+
+## Data frames: tables in R
+
+A **data frame** is a table. Each column is a vector, and all the columns have the same length. Each row is one observation, such as one person, one household or one day.
+
+```{webr}
+households <- data.frame(
+  id        = c(101, 102, 103, 104, 105),
+  district  = c("Gulu", "Arua", "Gulu", "Mbale", "Arua"),
+  size      = c(4, 6, 2, 7, 5),
+  has_water = c(TRUE, FALSE, TRUE, TRUE, FALSE)
+)
+households
+```
+
+Each column has its own type. `district` is character, `size` is numeric and `has_water` is logical.
+
+::: {.callout-tip}
+## Excel bridge
+A data frame is like an Excel sheet with headers in row 1 and one record per row. The difference: in R, every value in a column must have the same type. You cannot have a number in one cell and a note in the next.
+:::
+
+## Inspecting a data frame
+
+Real data is too large to read on screen, so you inspect it with functions. Today you will use the `penguins` data from the **palmerpenguins** package: measurements of 344 penguins on three islands in Antarctica.
+
+```{webr}
+library(palmerpenguins)
+head(penguins)        # the first 6 rows
+```
+
+```{webr}
+nrow(penguins)        # number of rows
+ncol(penguins)        # number of columns
+names(penguins)       # column names
+```
+
+`str()` ("structure") is the most useful one. It shows each column's name, type and first few values:
+
+```{webr}
+str(penguins)
+```
+
+`summary()` gives a quick summary of every column, including the number of missing values:
+
+```{webr}
+summary(penguins)
+```
+
+You may notice that `penguins` prints as a **tibble**. A tibble is a modern data frame. Everything you learn today works the same way on both.
+
+## Picking columns
+
+Use `$` and the column name to get one column as a vector:
+
+```{webr}
+penguins$island[1:10]
+mean(penguins$body_mass_g, na.rm = TRUE)
+```
+
+Use square brackets with two positions, `[rows, columns]`. Leave a position empty to mean "all":
+
+```{webr}
+households[, "size"]                 # one column, as a vector
+households[, c("district", "size")]  # two columns, as a data frame
+```
+
+## Picking rows
+
+```{webr}
+households[2, ]          # the second row
+households[1:3, ]        # the first three rows
+```
+
+The most useful way is by a condition, exactly as with vectors on Day 3. Put the condition in the rows position:
+
+```{webr}
+households[households$size > 4, ]
+households[households$district == "Gulu", ]
+households[households$has_water & households$size >= 4, ]
+```
+
+Notice the comma at the end. It means "all columns".
+
+## Adding a column
+
+Assign to a new column name with `$`:
+
+```{webr}
+households$size_group <- ifelse(households$size >= 5, "large", "small")
+households
+```
+
+`ifelse()` checks a condition for every row and returns the first value where it is `TRUE` and the second where it is `FALSE`. You will learn more about it on Day 9.
+
+## Counting categories
+
+`table()` counts how often each value appears. It is the quickest way to summarise a category column:
+
+```{webr}
+table(penguins$species)
+table(penguins$species, penguins$island)
+```
+
+::: {.callout-tip}
+## Excel bridge
+`table()` with two columns does the same job as a simple pivot table that counts rows.
+:::
+
+## Lists: containers for anything
+
+A **list** can hold values of different types and lengths, including other lists and whole data frames. Many R functions return their results as lists.
+
+```{webr}
+survey <- list(
+  name      = "Settlement survey 2026",
+  districts = c("Gulu", "Arua", "Mbale"),
+  n         = 1500,
+  data      = households
+)
+str(survey, max.level = 1)
+```
+
+Get one item out of a list with `$` or with double brackets `[[ ]]`:
+
+```{webr}
+survey$districts
+survey[["n"]]
+```
+
+Single brackets `[ ]` return a smaller list, not the item itself. This difference catches everyone out at first:
+
+```{webr}
+class(survey["n"])     # a list containing n
+class(survey[["n"]])   # n itself
+```
+
+A data frame is a special kind of list: a list of columns of the same length. That is why `$` works on both.
+
+## Exercises
+
+### Exercise 1: Create a data frame
+
+Create a data frame called `crops` with two columns:
+
+- `crop`: `"maize"`, `"beans"`, `"cassava"`
+- `tonnes`: `120`, `45`, `210`
+
+```{webr}
+#| exercise: ex4_create
+crops <- data.frame(
+  crop   = ______,
+  tonnes = ______
+)
+crops
+```
+
+::: {.hint exercise="ex4_create"}
+::: {.callout-note collapse="false"}
+## Hint
+Each column is a vector made with `c()`. Text values need quotes.
+:::
+:::
+
+::: {.solution exercise="ex4_create"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+crops <- data.frame(
+  crop   = c("maize", "beans", "cassava"),
+  tonnes = c(120, 45, 210)
+)
+crops
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex4_create
+#| check: true
+if (!exists("crops") || !is.data.frame(crops)) {
+  list(correct = FALSE, message = "Create a data frame called crops with data.frame().")
+} else if (!identical(names(crops), c("crop", "tonnes"))) {
+  list(correct = FALSE, message = "The columns should be called crop and tonnes.")
+} else if (!identical(crops$crop, c("maize", "beans", "cassava")) || !isTRUE(all.equal(crops$tonnes, c(120, 45, 210)))) {
+  list(correct = FALSE, message = "The column names are right. Check the values.")
+} else {
+  list(correct = TRUE, message = "Correct. You built a data frame from two vectors.")
+}
+```
+
+### Exercise 2: Inspect the data
+
+How many penguins (rows) are in the `penguins` data frame?
+
+```{webr}
+#| exercise: ex4_nrow
+#| setup: true
+library(palmerpenguins)
+```
+
+```{webr}
+#| exercise: ex4_nrow
+______(penguins)
+```
+
+::: {.hint exercise="ex4_nrow"}
+::: {.callout-note collapse="false"}
+## Hint
+One function counts rows and another counts columns. Their names start with `n`.
+:::
+:::
+
+::: {.solution exercise="ex4_nrow"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+nrow(penguins)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex4_nrow
+#| check: true
+if (identical(as.integer(.result), 344L)) {
+  list(correct = TRUE, message = "Correct: 344 penguins.")
+} else if (identical(as.integer(.result), 8L)) {
+  list(correct = FALSE, message = "That is the number of columns. Use nrow() for rows.")
+} else {
+  list(correct = FALSE, message = "Use nrow() on penguins.")
+}
+```
+
+### Exercise 3: Summarise a column
+
+What is the average flipper length (`flipper_length_mm`) of all the penguins? Some values are missing.
+
+```{webr}
+#| exercise: ex4_mean
+#| setup: true
+library(palmerpenguins)
+```
+
+```{webr}
+#| exercise: ex4_mean
+mean(______, na.rm = TRUE)
+```
+
+::: {.hint exercise="ex4_mean"}
+::: {.callout-note collapse="false"}
+## Hint
+Get the column with `penguins$` followed by the column name.
+:::
+:::
+
+::: {.solution exercise="ex4_mean"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+mean(penguins$flipper_length_mm, na.rm = TRUE)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex4_mean
+#| check: true
+if (isTRUE(all.equal(.result, mean(penguins$flipper_length_mm, na.rm = TRUE)))) {
+  list(correct = TRUE, message = sprintf("Correct: about %.1f mm.", .result))
+} else {
+  list(correct = FALSE, message = "Use mean() on penguins$flipper_length_mm.")
+}
+```
+
+### Exercise 4: Filter rows
+
+Keep only the rows of `households` where the household does **not** have water. Save them as `no_water`.
+
+```{webr}
+#| exercise: ex4_filter
+#| setup: true
+households <- data.frame(
+  id        = c(101, 102, 103, 104, 105),
+  district  = c("Gulu", "Arua", "Gulu", "Mbale", "Arua"),
+  size      = c(4, 6, 2, 7, 5),
+  has_water = c(TRUE, FALSE, TRUE, TRUE, FALSE)
+)
+```
+
+```{webr}
+#| exercise: ex4_filter
+no_water <- households[______, ]
+no_water
+```
+
+::: {.hint exercise="ex4_filter"}
+::: {.callout-note collapse="false"}
+## Hint
+`has_water` is already `TRUE` or `FALSE`. The `!` symbol means "not": `!TRUE` is `FALSE`.
+:::
+:::
+
+::: {.solution exercise="ex4_filter"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+no_water <- households[!households$has_water, ]
+no_water
+```
+`households[households$has_water == FALSE, ]` also works.
+:::
+:::
+
+```{webr}
+#| exercise: ex4_filter
+#| check: true
+if (!exists("no_water")) {
+  list(correct = FALSE, message = "Save the result as no_water.")
+} else if (!is.data.frame(no_water)) {
+  list(correct = FALSE, message = "no_water should be a data frame. Keep the comma before ].")
+} else if (identical(no_water$id, c(102, 105))) {
+  list(correct = TRUE, message = "Correct: households 102 and 105.")
+} else {
+  list(correct = FALSE, message = "You should get households 102 and 105.")
+}
+```
+
+### Exercise 5: Get an item from a list
+
+Get the vector of districts out of the list `survey`, so that the result is a character vector, not a list.
+
+```{webr}
+#| exercise: ex4_list
+#| setup: true
+survey <- list(name = "Settlement survey 2026", districts = c("Gulu", "Arua", "Mbale"), n = 1500)
+```
+
+```{webr}
+#| exercise: ex4_list
+______
+```
+
+::: {.hint exercise="ex4_list"}
+::: {.callout-note collapse="false"}
+## Hint
+Use `$` or double brackets `[[ ]]` with the item name `districts`.
+:::
+:::
+
+::: {.solution exercise="ex4_list"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+survey$districts
+```
+`survey[["districts"]]` gives the same result.
+:::
+:::
+
+```{webr}
+#| exercise: ex4_list
+#| check: true
+if (identical(.result, c("Gulu", "Arua", "Mbale"))) {
+  list(correct = TRUE, message = "Correct.")
+} else if (is.list(.result)) {
+  list(correct = FALSE, message = "You got a list back. Use [[ ]] or $ instead of [ ].")
+} else {
+  list(correct = FALSE, message = "Use survey$districts.")
+}
+```
+
+## Your turn
+
+Use the `penguins` data.
+
+1. How many penguins of each species live on each island? (Use `table()`.)
+2. Make a data frame of only the Gentoo penguins. How many are there?
+3. Add a column `body_mass_kg` with the body mass in kilograms (divide grams by 1,000).
+4. Which island has the heaviest penguin? Try `penguins[which.max(penguins$body_mass_g), ]`.
+
+```{webr}
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Forgetting the comma.** `households[households$size > 4]` without a comma tries to pick columns, not rows. Write `households[households$size > 4, ]`.
+- **Forgetting the data frame name in a condition.** `households[size > 4, ]` fails, because `size` on its own does not exist. Write `households$size`.
+- **Single brackets on a list.** `survey["n"]` is still a list. Use `survey[["n"]]` or `survey$n`.
+- **Misspelt column names.** `penguins$bodymass` returns `NULL` without an error. Check the names with `names()`.
+
+## Summary
+
+- A data frame is a table of columns (vectors) of the same length. Create one with `data.frame()`.
+- Inspect it with `head()`, `str()`, `summary()`, `nrow()`, `ncol()` and `names()`.
+- `df$col` gives one column. `df[rows, columns]` picks rows and columns. Leave a position empty for "all".
+- Filter rows with a condition: `df[df$col > 5, ]`.
+- Add a column with `df$new <- ...`.
+- `table()` counts categories.
+- A list holds items of any type. Use `$` or `[[ ]]` to get an item out.
+
+**Tomorrow:** you will learn how functions work, install packages and read your own data from CSV files.
+
+## Further reading
+
+- [R for Data Science (2e), chapter 1: Data visualisation](https://r4ds.hadley.nz/data-visualize) also introduces the `penguins` data.
+- [palmerpenguins documentation](https://allisonhorst.github.io/palmerpenguins/), including where the data came from.
+- [Hands-On Programming with R, chapter 5.8: Lists and 5.9: Data frames](https://rstudio-education.github.io/hopr/r-objects.html#lists).

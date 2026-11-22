@@ -1,0 +1,14 @@
+engine: knitr
+toc: true
+toc-depth: 2
+format:
+  live-html:
+    theme:
+      light: [cosmo, ../assets/light.scss, ../assets/custom.scss]
+      dark: [darkly, ../assets/custom.scss]
+    respect-user-color-scheme: true
+    code-copy: true
+    highlight-style: a11y
+    link-external-newwindow: true
+webr:
+  render-df: paged-table
