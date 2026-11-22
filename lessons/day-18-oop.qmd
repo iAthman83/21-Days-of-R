@@ -1,0 +1,659 @@
+---
+title: "Day 18: Object-oriented R: S3, S4 and R6"
+subtitle: "Create your own types of object, give them methods, and choose between R's three main object systems"
+webr:
+  packages:
+    - R6
+  resources:
+    - ../data/household-survey.csv
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Expert · **Time:** about 3 hours · **Needs:** [Day 17](day-17-environments.qmd) · **Packages:** R6 · **Data:** `data/household-survey.csv`
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Explain what a class, an object, a generic and a method are.
+2. Build an S3 class with a constructor, a validator and methods for `print()` and `summary()`.
+3. Write your own generic function.
+4. Recognise S4 code and write a simple S4 class and method.
+5. Build an R6 class with fields and methods that change the object in place.
+6. Choose which system fits a job.
+
+```{webr}
+library(R6)
+hh <- read.csv("data/household-survey.csv")
+```
+
+## You have used objects all along
+
+Why does `print()` show a data frame as a table, a factor with its levels, and a model with its coefficients? Because `print()` is a **generic** function. It looks at the **class** of its input and calls the matching **method**.
+
+```{webr}
+class(hh)
+class(factor("a"))
+class(lm(household_size ~ 1, data = hh))
+```
+
+Some terms:
+
+- A **class** is a type of object, such as `"data.frame"` or `"lm"`.
+- An **object** is one value of that class.
+- A **generic** is a function whose behaviour depends on the class of its input, such as `print()`, `summary()` or `plot()`.
+- A **method** is the version of a generic for one class, such as `print.data.frame()`.
+
+R has several object systems. You will learn the three that matter most:
+
+| System | Style | Where you meet it |
+|---|---|---|
+| **S3** | simple and informal, built into R | most of base R and the tidyverse |
+| **S4** | formal, with defined fields and checks | Bioconductor, some statistics packages |
+| **R6** | objects that change in place, like Python or Java | Shiny internals, API clients, simulations |
+
+## S3
+
+### An S3 object is a list with a class
+
+An S3 object is an ordinary R object with a `class` attribute. That is all:
+
+```{webr}
+s <- list(name = "Pader household survey", n = 40, districts = c("Gulu", "Arua"))
+class(s) <- "survey"
+class(s)
+unclass(s)    # remove the class to see what is underneath
+```
+
+### Constructor and validator
+
+Setting the class by hand works, but nothing stops someone making a broken `survey`. Good practice is to write three functions:
+
+1. A **constructor**, `new_survey()`, that builds the object quickly and checks the basic types.
+2. A **validator**, `validate_survey()`, that makes more expensive checks on the values.
+3. A **helper**, `survey()`, that users call. It tidies the inputs and calls the other two.
+
+```{webr}
+new_survey <- function(data, name) {
+  stopifnot(is.data.frame(data), is.character(name), length(name) == 1)
+  structure(list(data = data, name = name), class = "survey")
+}
+
+validate_survey <- function(x) {
+  if (!"household_id" %in% names(x$data)) {
+    stop("A survey needs a household_id column.", call. = FALSE)
+  }
+  if (anyDuplicated(x$data$household_id)) {
+    stop("household_id values must be unique.", call. = FALSE)
+  }
+  x
+}
+
+survey <- function(data, name = "Untitled survey") {
+  validate_survey(new_survey(data, name))
+}
+
+sv <- survey(hh, name = "Northern Uganda household survey")
+class(sv)
+```
+
+`structure()` creates an object and sets its attributes in one step.
+
+### Methods for existing generics
+
+Printing `sv` now shows the raw list, which is not helpful. Write a `print()` method: a function named `print.survey()`. The name is **generic, a dot, then the class**.
+
+```{webr}
+print.survey <- function(x, ...) {
+  cat("<survey>", x$name, "\n")
+  cat(nrow(x$data), "households,", length(unique(x$data$district)), "districts\n")
+  invisible(x)
+}
+
+sv
+```
+
+A few conventions:
+
+- Methods take the same arguments as the generic. `print()` has `x` and `...`, so `print.survey()` must too.
+- A `print()` method returns its input invisibly, so `y <- print(x)` works and nothing prints twice.
+
+Add a `summary()` method the same way:
+
+```{webr}
+summary.survey <- function(object, ...) {
+  table(object$data$district)
+}
+summary(sv)
+```
+
+### Your own generic
+
+To make a new generic, write a function that calls `UseMethod()`. Then write methods for the classes you need, and a `default` method for everything else:
+
+```{webr}
+coverage <- function(x, ...) UseMethod("coverage")
+
+coverage.survey <- function(x, column, ...) {
+  mean(!is.na(x$data[[column]]))
+}
+
+coverage.default <- function(x, ...) {
+  mean(!is.na(x))
+}
+
+coverage(sv, "monthly_income_ugx")    # uses coverage.survey()
+coverage(c(1, NA, 3, 4))              # uses coverage.default()
+```
+
+`UseMethod("coverage")` looks at the class of the first argument and calls `coverage.<class>()`. If there is no such method, it calls `coverage.default()`. If there is no default either, you get an error.
+
+### Inheritance
+
+An object can have several classes. R tries them in order:
+
+```{webr}
+panel <- sv
+class(panel) <- c("panel_survey", "survey")
+panel                # no print.panel_survey(), so print.survey() is used
+
+print.panel_survey <- function(x, ...) {
+  cat("(panel survey: households are visited more than once)\n")
+  NextMethod()       # then carry on with the next class, survey
+}
+panel
+```
+
+`NextMethod()` calls the method for the next class in the list. It lets a subclass add to its parent's behaviour instead of copying it.
+
+::: {.callout-tip}
+## See the methods for a class or generic
+`methods(class = "survey")` lists the methods for a class. `methods("print")` lists every `print()` method, which is a long list.
+:::
+
+```{webr}
+methods(class = "survey")
+```
+
+## S4
+
+S4 is a stricter version of the same idea. A class has defined **slots** (fields) with fixed types, and R checks them when you create an object. You will mostly **read** S4 code in other packages, so learn to recognise it.
+
+```{webr}
+setClass("District", representation(name = "character", households = "numeric"))
+
+gulu <- new("District", name = "Gulu", households = 11)
+gulu
+gulu@name             # slots use @, not $
+isVirtualClass("District")
+```
+
+Giving a slot the wrong type is an error straight away:
+
+```{webr}
+new("District", name = "Arua", households = "ten") # Error expected: households must be numeric
+```
+
+Generics and methods are created with `setGeneric()` and `setMethod()`:
+
+```{webr}
+setGeneric("describe", function(obj) standardGeneric("describe"))
+
+setMethod("describe", "District", function(obj) {
+  paste0(obj@name, ": ", obj@households, " households")
+})
+
+describe(gulu)
+```
+
+You can add a **validity** function that runs every time an object is created:
+
+```{webr}
+setClass("Site",
+  representation(name = "character", visits = "numeric"),
+  validity = function(object) {
+    if (any(object@visits < 0)) "visits cannot be negative" else TRUE
+  }
+)
+new("Site", name = "Pabbo", visits = 3)
+```
+
+The details of S4 go further than this lesson. Use S4 when you are contributing to a package that already uses it, such as those in Bioconductor.
+
+## R6
+
+S3 and S4 objects follow R's usual **copy-on-modify** rule: change a copy, and the original stays the same (Day 17). R6 objects are different. They are built on environments, so they are **modified in place**, and every name that points to the object sees the change. This is called **reference semantics**.
+
+That makes R6 the right tool for objects that hold changing **state**: a connection to a database, a queue of jobs, a running simulation, a progress tracker.
+
+### A first R6 class
+
+```{webr}
+Tracker <- R6Class("Tracker",
+  public = list(
+    target = NULL,
+    done = 0,
+
+    initialize = function(target) {
+      stopifnot(is.numeric(target), target > 0)
+      self$target <- target
+    },
+
+    record = function(n = 1) {
+      self$done <- self$done + n
+      invisible(self)
+    },
+
+    progress = function() {
+      paste0(self$done, " of ", self$target, " interviews (", round(100 * self$done / self$target), "%)")
+    }
+  )
+)
+
+gulu_team <- Tracker$new(target = 15)
+gulu_team$record(4)
+gulu_team$progress()
+```
+
+- `R6Class()` defines the class. Its `public` list holds **fields** (values) and **methods** (functions).
+- `Tracker$new()` creates an object and runs `initialize()`.
+- Inside methods, `self` is the object itself.
+- Methods that change the object return `invisible(self)`, so calls can be **chained**:
+
+```{webr}
+gulu_team$record(2)$record(3)$progress()
+```
+
+### Reference semantics
+
+```{webr}
+copy_of_team <- gulu_team    # NOT a copy: both names point to the same object
+copy_of_team$record(6)
+gulu_team$progress()         # changed too
+
+real_copy <- gulu_team$clone()
+real_copy$record(100)
+gulu_team$progress()         # unchanged
+```
+
+Use `$clone()` when you really want a separate copy.
+
+### Private fields
+
+Fields in `private` cannot be reached from outside the object. Use them to protect values that should only change through methods:
+
+```{webr}
+Account <- R6Class("Account",
+  public = list(
+    deposit = function(amount) {
+      stopifnot(amount > 0)
+      private$balance <- private$balance + amount
+      invisible(self)
+    },
+    get_balance = function() private$balance
+  ),
+  private = list(balance = 0)
+)
+
+acc <- Account$new()
+acc$deposit(50000)$deposit(25000)
+acc$get_balance()
+acc$balance              # NULL: private fields are hidden
+```
+
+## Which system should I use?
+
+| If you need… | Use |
+|---|---|
+| a new type of result with nice `print()` and `summary()` output | **S3**. It is simple and is what most R users expect. |
+| strict types and validation, or you are extending an S4 package | **S4** |
+| an object whose state changes over time, shared by several parts of your code | **R6** |
+| none of these | a plain list or data frame, and functions |
+
+Start with S3. Most packages never need more.
+
+::: {.callout-tip}
+## Excel bridge
+A custom Excel table with fixed columns and data validation is like an S4 class: you cannot put text in a number column. A shared workbook that several people edit is like an R6 object: everyone sees the same, changing copy. Saving a copy of a file before you change it is copy-on-modify.
+:::
+
+## Exercises
+
+### Exercise 1: An S3 constructor
+
+Write `new_money()`. It should check that `amount` is numeric, then return `amount` with the class `"money"` and an attribute `currency`. Use `structure()`.
+
+```{webr}
+#| exercise: ex18_constructor
+new_money <- function(amount, currency = "UGX") {
+  stopifnot(is.numeric(amount))
+  structure(amount, class = ______, currency = ______)
+}
+m <- new_money(c(25000, 7500))
+class(m)
+attr(m, "currency")
+```
+
+::: {.hint exercise="ex18_constructor"}
+::: {.callout-note collapse="false"}
+## Hint
+The class is the text `"money"`. The currency attribute is the `currency` argument.
+:::
+:::
+
+::: {.solution exercise="ex18_constructor"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+new_money <- function(amount, currency = "UGX") {
+  stopifnot(is.numeric(amount))
+  structure(amount, class = "money", currency = currency)
+}
+m <- new_money(c(25000, 7500))
+class(m)
+attr(m, "currency")
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex18_constructor
+#| check: true
+fails_text <- tryCatch({ new_money("a"); FALSE }, error = function(e) TRUE)
+x <- tryCatch(new_money(10, "KES"), error = function(e) NULL)
+if (!exists("new_money") || !is.function(new_money)) {
+  list(correct = FALSE, message = "Create a function called new_money.")
+} else if (is.null(x) || !identical(class(x), "money")) {
+  list(correct = FALSE, message = "The object's class should be \"money\".")
+} else if (!identical(attr(x, "currency"), "KES")) {
+  list(correct = FALSE, message = "Set the currency attribute from the argument: currency = currency.")
+} else if (!fails_text) {
+  list(correct = FALSE, message = "new_money(\"a\") should stop with an error. Keep the stopifnot() check.")
+} else if (!identical(unclass(x)[1], 10)) {
+  list(correct = FALSE, message = "The amount should stay the same underneath the class.")
+} else {
+  list(correct = TRUE, message = "Correct. You have made a new S3 class.")
+}
+```
+
+### Exercise 2: A `format()` method
+
+Write a `format()` method for the `"money"` class. It should return text such as `"UGX 25,000"`: the currency, a space, and the amount with a comma for thousands. A `print()` method that uses it is already written.
+
+```{webr}
+#| exercise: ex18_method
+#| setup: true
+new_money <- function(amount, currency = "UGX") {
+  stopifnot(is.numeric(amount))
+  structure(amount, class = "money", currency = currency)
+}
+print.money <- function(x, ...) {
+  print(format(x), quote = FALSE)
+  invisible(x)
+}
+```
+
+```{webr}
+#| exercise: ex18_method
+______ <- function(x, ...) {
+  paste(attr(x, "currency"), format(unclass(x), big.mark = ","))
+}
+format(new_money(c(25000, 7500)))
+```
+
+::: {.hint exercise="ex18_method"}
+::: {.callout-note collapse="false"}
+## Hint
+A method's name is the generic, a dot and the class: `format.money`.
+:::
+:::
+
+::: {.solution exercise="ex18_method"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+format.money <- function(x, ...) {
+  paste(attr(x, "currency"), format(unclass(x), big.mark = ","))
+}
+format(new_money(c(25000, 7500)))
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex18_method
+#| check: true
+if (!exists("format.money") || !is.function(format.money)) {
+  list(correct = FALSE, message = "Name the method format.money: the generic, a dot, then the class.")
+} else {
+  out <- format(new_money(c(25000, 7500)))
+  if (identical(trimws(out), c("UGX 25,000", "UGX 7,500")) || identical(gsub(" +", " ", out), c("UGX 25,000", "UGX 7,500"))) {
+    list(correct = TRUE, message = "Correct. format() now dispatches to your method, and print.money() uses it.")
+  } else {
+    list(correct = FALSE, message = paste0("format() gave ", paste(out, collapse = ", "), ". Expected UGX 25,000 and UGX 7,500."))
+  }
+}
+```
+
+### Exercise 3: A new generic
+
+Create a generic `area()` with `UseMethod()`, and two methods: `area.square()` returns `side^2` and `area.circle()` returns `pi * radius^2`.
+
+```{webr}
+#| exercise: ex18_generic
+area <- function(shape) ______("area")
+area.square <- function(shape) shape$side^2
+area.circle <- function(shape) ______
+
+sq <- structure(list(side = 3), class = "square")
+ci <- structure(list(radius = 1), class = "circle")
+area(sq)
+area(ci)
+```
+
+::: {.hint exercise="ex18_generic"}
+::: {.callout-note collapse="false"}
+## Hint
+The generic's body is `UseMethod("area")`. The circle method uses `shape$radius`: `pi * shape$radius^2`.
+:::
+:::
+
+::: {.solution exercise="ex18_generic"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+area <- function(shape) UseMethod("area")
+area.square <- function(shape) shape$side^2
+area.circle <- function(shape) pi * shape$radius^2
+
+sq <- structure(list(side = 3), class = "square")
+ci <- structure(list(radius = 1), class = "circle")
+area(sq)
+area(ci)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex18_generic
+#| check: true
+a1 <- tryCatch(area(structure(list(side = 4), class = "square")), error = function(e) NULL)
+a2 <- tryCatch(area(structure(list(radius = 2), class = "circle")), error = function(e) NULL)
+if (!exists("area") || !any(grepl("UseMethod", deparse(body(area))))) {
+  list(correct = FALSE, message = "The generic area() should call UseMethod(\"area\").")
+} else if (!isTRUE(all.equal(a1, 16))) {
+  list(correct = FALSE, message = "area() of a square with side 4 should be 16.")
+} else if (!isTRUE(all.equal(a2, pi * 4))) {
+  list(correct = FALSE, message = "area() of a circle with radius 2 should be pi * 2^2. Use pi * shape$radius^2.")
+} else {
+  list(correct = TRUE, message = "Correct. One generic, two methods, chosen by class.")
+}
+```
+
+### Exercise 4: An S4 class
+
+Define an S4 class `"Crop"` with two slots: `name` (character) and `yield_kg` (numeric). Create an object `maize` with name `"maize"` and yield `1200`.
+
+```{webr}
+#| exercise: ex18_s4
+setClass("Crop", representation(name = ______, yield_kg = ______))
+maize <- new("Crop", name = "maize", yield_kg = 1200)
+maize@yield_kg
+```
+
+::: {.hint exercise="ex18_s4"}
+::: {.callout-note collapse="false"}
+## Hint
+Each slot type is given as text: `name = "character"` and `yield_kg = "numeric"`.
+:::
+:::
+
+::: {.solution exercise="ex18_s4"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+setClass("Crop", representation(name = "character", yield_kg = "numeric"))
+maize <- new("Crop", name = "maize", yield_kg = 1200)
+maize@yield_kg
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex18_s4
+#| check: true
+if (!isClass("Crop")) {
+  list(correct = FALSE, message = "Define the class with setClass(\"Crop\", ...).")
+} else {
+  slots <- getSlots("Crop")
+  rejects_text <- tryCatch({ new("Crop", name = "beans", yield_kg = "lots"); FALSE }, error = function(e) TRUE)
+  if (!identical(unname(slots[c("name", "yield_kg")]), c("character", "numeric"))) {
+    list(correct = FALSE, message = "The slots should be name = \"character\" and yield_kg = \"numeric\".")
+  } else if (!exists("maize") || !is(maize, "Crop") || !identical(maize@yield_kg, 1200)) {
+    list(correct = FALSE, message = "Create maize with new(\"Crop\", name = \"maize\", yield_kg = 1200).")
+  } else if (!rejects_text) {
+    list(correct = FALSE, message = "A text yield should be rejected. Check the slot type.")
+  } else {
+    list(correct = TRUE, message = "Correct. S4 checks the slot types for you.")
+  }
+}
+```
+
+### Exercise 5: An R6 class
+
+Complete the R6 class `Queue`. `add()` should append `item` to the `items` field and return `invisible(self)`. `size()` should return the number of items.
+
+```{webr}
+#| exercise: ex18_r6
+#| setup: true
+library(R6)
+```
+
+```{webr}
+#| exercise: ex18_r6
+Queue <- R6Class("Queue",
+  public = list(
+    items = list(),
+    add = function(item) {
+      self$items <- c(self$items, list(item))
+      ______
+    },
+    size = function() ______
+  )
+)
+q <- Queue$new()
+q$add("HH001")$add("HH002")
+q$size()
+```
+
+::: {.hint exercise="ex18_r6"}
+::: {.callout-note collapse="false"}
+## Hint
+Return `invisible(self)` so calls can be chained. The size is `length(self$items)`.
+:::
+:::
+
+::: {.solution exercise="ex18_r6"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+Queue <- R6Class("Queue",
+  public = list(
+    items = list(),
+    add = function(item) {
+      self$items <- c(self$items, list(item))
+      invisible(self)
+    },
+    size = function() length(self$items)
+  )
+)
+q <- Queue$new()
+q$add("HH001")$add("HH002")
+q$size()
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex18_r6
+#| check: true
+if (!exists("Queue") || !inherits(Queue, "R6ClassGenerator")) {
+  list(correct = FALSE, message = "Define Queue with R6Class().")
+} else {
+  q2 <- Queue$new()
+  chained <- tryCatch({ q2$add("a")$add("b"); TRUE }, error = function(e) FALSE)
+  if (!chained) {
+    list(correct = FALSE, message = "Chaining failed. add() should end with invisible(self).")
+  } else if (!identical(q2$size(), 2L)) {
+    list(correct = FALSE, message = "After two adds, size() should return 2. Use length(self$items).")
+  } else {
+    q3 <- q2
+    q3$add("c")
+    if (!identical(q2$size(), 3L)) {
+      list(correct = FALSE, message = "Something is off with the items field.")
+    } else {
+      list(correct = TRUE, message = "Correct. And because R6 objects are references, adding through q3 also changed q2.")
+    }
+  }
+}
+```
+
+## Your turn
+
+1. Add a `validate_money()` function that rejects negative amounts, and a helper `money()` that calls `new_money()` then `validate_money()`.
+2. Write a `+` method for `"money"` (name it `` `+.money` ``) that adds two amounts and stops if their currencies differ.
+3. Extend the `Tracker` R6 class with a `remaining()` method and a `private` log of every `record()` call with the time (`Sys.time()`). Add a `history()` method that returns the log as a data frame.
+
+```{webr}
+library(R6)
+hh <- read.csv("data/household-survey.csv")
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Getting the method name wrong.** It is `generic.class`, such as `print.survey`. `printsurvey` or `survey.print` are never called.
+- **Method arguments that do not match the generic.** `print.survey <- function(s)` breaks when `print()` passes `x`. Copy the generic's arguments, including `...`.
+- **Using `$` on S4 objects.** S4 slots use `@`.
+- **Treating an R6 object like an ordinary value.** `b <- a` does not copy it. Use `a$clone()`.
+- **Forgetting `self$`** inside R6 methods. `done <- done + 1` creates a local variable. `self$done <- self$done + 1` changes the field.
+- **Reaching for R6 when a function would do.** Objects that change in place are harder to reason about. Use them only when you need shared, changing state.
+
+## Summary
+
+- Generics such as `print()` and `summary()` call a different method for each class.
+- **S3:** an object is a value with a `class` attribute. Write a constructor, a validator and a helper. Methods are named `generic.class`. New generics call `UseMethod()`. `NextMethod()` passes on to the parent class.
+- **S4:** formal classes with typed slots, created with `setClass()` and `new()`. Slots use `@`. Methods use `setGeneric()` and `setMethod()`.
+- **R6:** classes built with `R6Class()`. Objects are modified in place, use `self` inside methods, and can have `private` fields. Copy with `$clone()`.
+- Start with S3. Use S4 for strict types and R6 for shared, changing state.
+
+**Next:** on Day 19 you will measure and speed up slow code.
+
+## Further reading
+
+- [Advanced R (2e), chapters 12–16: Object-oriented programming](https://adv-r.hadley.nz/oo.html), by Hadley Wickham. Chapter 13 covers S3, 14 R6 and 15 S4, and 16 compares them.
+- [R6 documentation](https://r6.r-lib.org/).

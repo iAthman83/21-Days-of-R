@@ -40,11 +40,11 @@ Lessons: [CC BY 4.0](LICENSE-CONTENT.md) · Code: [MIT](LICENSE)
 | 14 | Advanced | Statistical modelling | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-14-modelling.html) | [`day-14-modelling.qmd`](lessons/day-14-modelling.qmd) |
 | 15 | Advanced | Reproducible reports with Quarto | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-15-quarto-reports.html) | [`day-15-quarto-reports.qmd`](lessons/day-15-quarto-reports.qmd) |
 | 16 | Advanced | Debugging and defensive code | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-16-debugging.html) | [`day-16-debugging.qmd`](lessons/day-16-debugging.qmd) |
-| 17 | Expert | Environments and scoping | Coming soon |  |
-| 18 | Expert | Object-oriented R | Coming soon |  |
-| 19 | Expert | Performance | Coming soon |  |
-| 20 | Expert | Writing an R package | Coming soon |  |
-| 21 | Expert | Capstone project | Coming soon |  |
+| 17 | Expert | Environments and scoping | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-17-environments.html) | [`day-17-environments.qmd`](lessons/day-17-environments.qmd) |
+| 18 | Expert | Object-oriented R | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-18-oop.html) | [`day-18-oop.qmd`](lessons/day-18-oop.qmd) |
+| 19 | Expert | Performance | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-19-performance.html) | [`day-19-performance.qmd`](lessons/day-19-performance.qmd) |
+| 20 | Expert | Writing an R package | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-20-packages.html) | [`day-20-packages.qmd`](lessons/day-20-packages.qmd) |
+| 21 | Expert | Capstone project | [Open lesson](https://iathman83.github.io/21-Days-of-R/lessons/day-21-capstone.html) | [`day-21-capstone.qmd`](lessons/day-21-capstone.qmd) |
 
 ## Work on your own computer
 
@@ -53,7 +53,7 @@ You can do Days 1–14 in the browser. Days 15, 20 and 21 need R on your compute
 1. Install [R](https://cran.r-project.org) and [RStudio Desktop](https://posit.co/download/rstudio-desktop/).
 2. Install the course packages in the RStudio Console:
    ```r
-   install.packages(c("tidyverse", "palmerpenguins", "gapminder"))
+   install.packages(c("tidyverse", "palmerpenguins", "gapminder", "R6", "data.table", "bench", "testthat"))
    ```
 3. Download this repository (**Code → Download ZIP**) or clone it:
    ```sh
@@ -79,7 +79,7 @@ planning/          tool decision note and syllabus
 You need [R](https://cran.r-project.org) and [Quarto](https://quarto.org/docs/get-started/) 1.4 or later.
 
 ```sh
-Rscript -e 'install.packages(c("knitr", "rmarkdown", "tidyverse", "palmerpenguins", "gapminder"))'
+Rscript -e 'install.packages(c("knitr", "rmarkdown", "tidyverse", "palmerpenguins", "gapminder", "R6", "data.table", "bench", "testthat"))'
 Rscript tests/check-lessons.R
 quarto preview
 ```

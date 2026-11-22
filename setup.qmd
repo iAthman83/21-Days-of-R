@@ -25,7 +25,7 @@ RStudio is the program most people use to write R. It is free.
 Copy this line into the RStudio Console and press Enter:
 
 ```r
-install.packages(c("tidyverse", "palmerpenguins", "gapminder"))
+install.packages(c("tidyverse", "palmerpenguins", "gapminder", "R6", "data.table", "bench", "testthat"))
 ```
 
 Later lessons need more packages. Each lesson lists the packages it uses at the top.

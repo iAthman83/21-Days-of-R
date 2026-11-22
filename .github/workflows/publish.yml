@@ -41,6 +41,10 @@ jobs:
             any::forcats
             any::purrr
             any::broom
+            any::R6
+            any::data.table
+            any::bench
+            any::testthat
 
       - name: Run every lesson example and exercise solution
         run: Rscript tests/check-lessons.R

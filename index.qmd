@@ -175,42 +175,42 @@ Tracebacks, tryCatch, browser()
 ### Level 4: Expert
 
 ::: {.day-grid}
-::: {.day-card .soon}
-[Day 17 · coming soon]{.day-num}
+::: {.day-card}
+[Day 17]{.day-num}
 
-**Environments and scoping**
+**[Environments and scoping](lessons/day-17-environments.qmd)**
 
 Closures and function factories
 :::
 
-::: {.day-card .soon}
-[Day 18 · coming soon]{.day-num}
+::: {.day-card}
+[Day 18]{.day-num}
 
-**Object-oriented R**
+**[Object-oriented R](lessons/day-18-oop.qmd)**
 
 S3, S4 and R6
 :::
 
-::: {.day-card .soon}
-[Day 19 · coming soon]{.day-num}
+::: {.day-card}
+[Day 19]{.day-num}
 
-**Performance**
+**[Performance](lessons/day-19-performance.qmd)**
 
 bench, vectorisation, data.table
 :::
 
-::: {.day-card .soon}
-[Day 20 · coming soon]{.day-num}
+::: {.day-card}
+[Day 20]{.day-num}
 
-**Writing an R package**
+**[Writing an R package](lessons/day-20-packages.qmd)**
 
 roxygen2, testthat, devtools
 :::
 
-::: {.day-card .soon}
-[Day 21 · coming soon]{.day-num}
+::: {.day-card}
+[Day 21]{.day-num}
 
-**Capstone project**
+**[Capstone project](lessons/day-21-capstone.qmd)**
 
 From raw data to tested code and a report
 :::

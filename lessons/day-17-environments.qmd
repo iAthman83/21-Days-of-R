@@ -1,0 +1,560 @@
+---
+title: "Day 17: Environments and scoping"
+subtitle: "Learn how R finds the value of a name, how functions remember where they were made, and how to use that to write function factories"
+webr:
+  packages:
+    - purrr
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Expert · **Time:** about 2.5 hours · **Needs:** [Day 10](day-10-functions.qmd) · **Packages:** purrr
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Explain what an environment is and how R uses environments to find values.
+2. Predict which value a function will use, using the rules of lexical scoping.
+3. Explain why changing a variable inside a function does not change it outside.
+4. Write closures and function factories.
+5. Use `<<-` when you need it, and explain why you should rarely need it.
+
+```{webr}
+library(purrr)
+```
+
+## Why this matters
+
+Until now you have used names without thinking about where their values live. That works most of the time. But sooner or later you will meet code that behaves strangely: a function that uses a value you did not pass in, a variable that does not change when you expect it to, or a loop of functions that all give the same answer. Each of these is explained by **environments**. They are also the foundation for Days 18 and 20.
+
+## What an environment is
+
+An **environment** is a collection of names, each bound to a value. It works much like a named list, with two differences:
+
+1. Every environment has a **parent**, another environment.
+2. Environments are not copied when you modify them. (You will see why that matters on Day 18.)
+
+When you create an object at the top level, it goes into the **global environment**:
+
+```{webr}
+x <- 10
+environment()          # where this code runs
+ls()                   # names in the global environment
+```
+
+You can make your own environments and put values in them:
+
+```{webr}
+e <- new.env()
+assign("district", "Gulu", envir = e)
+e$households <- 12               # the same as assign()
+ls(e)
+get("district", envir = e)
+e$households
+```
+
+## How R finds a name
+
+When you type a name, R looks for it in the **current environment**. If the name is not there, R looks in the parent, then the parent's parent, and so on. The last environment in the chain is the **empty environment**. If R reaches it without finding the name, you get the familiar error `object 'x' not found`.
+
+`search()` lists the chain of environments above the global environment: one for each package you have loaded, then base R.
+
+```{webr}
+search()
+```
+
+In the browser you will also see a few entries, such as `webr_shims` and `package:knitr`, that run this page. On your own computer the list is shorter.
+
+This is why the order of `library()` calls matters. If two packages have a function with the same name, the one loaded **last** is found first. That is what the message "The following objects are masked from…" means. To be certain which one you get, use `package::function()`, for example `dplyr::filter()`.
+
+```{webr}
+environment(mean)      # mean() lives in the base package
+environment(map)       # map() lives in the purrr namespace
+```
+
+## Functions and their environments
+
+Each time a function runs, R creates a new, temporary environment for it, called the **execution environment**. The arguments and any objects created inside the function live there. When the function finishes, that environment is normally thrown away.
+
+```{webr}
+add_vat <- function(price) {
+  rate <- 0.18
+  price * (1 + rate)
+}
+add_vat(100)
+exists("rate")    # FALSE: rate lived only inside the function
+```
+
+### Lexical scoping
+
+The parent of the execution environment is the environment **where the function was defined**, not where it was called. This rule is called **lexical scoping**. So when a function uses a name it did not define, R looks where the function was written:
+
+```{webr}
+rate <- 0.18
+add_vat <- function(price) price * (1 + rate)   # rate is not an argument
+
+add_vat(100)
+
+rate <- 0.20      # change rate in the global environment
+add_vat(100)      # the function uses the new value
+```
+
+R looks up `rate` **when the function runs**, not when it was created. That is called **dynamic lookup**, and it is a common source of bugs: the result of `add_vat()` depends on a global value that anyone can change. Prefer passing values as arguments.
+
+### Name masking
+
+A name defined inside a function hides (masks) the same name outside it:
+
+```{webr}
+size <- 100
+f <- function() {
+  size <- 5
+  size * 2
+}
+f()
+size        # unchanged: the function made its own size
+```
+
+### Modifying a copy
+
+Assigning to a name inside a function creates a new binding in the execution environment. It never changes the object outside:
+
+```{webr}
+hh_count <- 10
+add_one <- function() {
+  hh_count <- hh_count + 1   # reads the outer value, writes a new local one
+  hh_count
+}
+add_one()
+add_one()
+hh_count                     # still 10
+```
+
+This is a good thing. It means a function cannot quietly change your data. To get a new value out of a function, **return it** and assign the result: `hh_count <- add_one()`.
+
+## Function factories and closures
+
+A function can create and return another function. A function that makes functions is called a **function factory**:
+
+```{webr}
+power <- function(exp) {
+  function(x) x^exp
+}
+
+square <- power(2)
+cube   <- power(3)
+
+square(4)
+cube(4)
+```
+
+How does `square()` remember that `exp` is 2? When `power(2)` ran, its execution environment held `exp = 2`. The new function was created inside that environment, so that environment became its parent. Because the returned function still refers to it, R keeps it instead of throwing it away. A function together with the environment it remembers is called a **closure**.
+
+```{webr}
+environment(square)$exp
+environment(cube)$exp
+```
+
+Factories are useful when you need many similar functions. Here is a factory that makes formatters for reports (Day 15):
+
+```{webr}
+make_formatter <- function(prefix = "", suffix = "", digits = 0) {
+  function(x) paste0(prefix, format(round(x, digits), big.mark = ","), suffix)
+}
+
+ugx <- make_formatter(prefix = "UGX ")
+pct <- make_formatter(suffix = "%", digits = 1)
+
+ugx(490027.03)
+pct(71.6667)
+```
+
+### Lazy evaluation and `force()`
+
+R does not evaluate an argument until the function uses it. This is called **lazy evaluation**. In a factory, that can cause a surprise:
+
+```{webr}
+make_adder <- function(n) function(x) x + n
+
+k <- 1
+add_k <- make_adder(k)
+k <- 100              # k changes before n is ever used
+add_k(1)              # 101, not 2
+```
+
+`n` was only evaluated when `add_k()` first ran, and by then `k` was 100. `force(n)` evaluates the argument at once. Use it in every factory:
+
+```{webr}
+make_adder <- function(n) {
+  force(n)
+  function(x) x + n
+}
+
+k <- 1
+add_k <- make_adder(k)
+k <- 100
+add_k(1)              # 2
+```
+
+### Factories with `map()`
+
+Factories combine well with iteration from Day 12:
+
+```{webr}
+powers <- map(1:4, power)   # a list of four functions
+map_dbl(powers, \(f) f(2))  # 2^1, 2^2, 2^3, 2^4
+```
+
+## `<<-`: changing the parent
+
+`<-` always creates or changes a name in the **current** environment. `<<-` (the "super-assignment" operator) looks up the parent chain and changes the first matching name it finds. If none exists, it creates one in the global environment.
+
+The one good use is a closure that keeps **state** between calls, such as a counter:
+
+```{webr}
+make_counter <- function() {
+  count <- 0
+  function() {
+    count <<- count + 1
+    count
+  }
+}
+
+next_id <- make_counter()
+next_id()
+next_id()
+next_id()
+```
+
+Each counter has its own `count`, hidden inside its own environment:
+
+```{webr}
+other <- make_counter()
+other()     # starts again at 1
+next_id()   # carries on at 4
+```
+
+::: {.callout-warning}
+## Avoid `<<-` on global variables
+Using `<<-` inside a normal function to change a global variable makes code hard to follow and hard to test: the function's result depends on, and changes, something outside it. If you find yourself writing `<<-`, ask whether the function should return a value instead. If you need an object that holds changing state, Day 18's R6 classes are a clearer tool.
+:::
+
+::: {.callout-tip}
+## Excel bridge
+A workbook is like an environment: sheet names are bound to sheets. A formula that refers to `Rates!B2` depends on a value outside itself, just as a function that uses a global variable does. Change the cell and every formula changes. Arguments are like typing the value into the formula: more work, but nothing else can change it.
+:::
+
+## Exercises
+
+### Exercise 1: Predict the value
+
+Read the code below **before** you run it. What does `f()` return? Save your answer as the number `answer`.
+
+```{webr}
+#| exercise: ex17_predict
+#| setup: true
+y <- 1
+f <- function() {
+  y <- 2
+  g <- function() y * 10
+  g()
+}
+```
+
+```{webr}
+#| exercise: ex17_predict
+# y <- 1
+# f <- function() {
+#   y <- 2
+#   g <- function() y * 10
+#   g()
+# }
+answer <- ______
+answer
+```
+
+::: {.hint exercise="ex17_predict"}
+::: {.callout-note collapse="false"}
+## Hint
+`g()` is defined inside `f()`, so it looks for `y` in `f()`'s environment first. Which `y` does it find there?
+:::
+:::
+
+::: {.solution exercise="ex17_predict"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+answer <- 20
+answer
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex17_predict
+#| check: true
+if (!exists("answer") || !is.numeric(answer)) {
+  list(correct = FALSE, message = "Save your answer as a number, for example answer <- 5.")
+} else if (identical(answer, f())) {
+  list(correct = TRUE, message = "Correct. g() was defined inside f(), so it finds f()'s y (2), not the global y (1).")
+} else if (identical(answer, 10)) {
+  list(correct = FALSE, message = "That uses the global y. g() is defined inside f(), so R looks in f()'s environment first.")
+} else {
+  list(correct = FALSE, message = "Run f() to check, then work out why: which y does g() find first?")
+}
+```
+
+### Exercise 2: A function factory
+
+Write a factory `make_vat()` that takes a VAT `rate` and returns a function of `price` that adds that rate. Use `force()`. Then make `vat_18`, which adds 18%.
+
+```{webr}
+#| exercise: ex17_factory
+make_vat <- function(rate) {
+  force(rate)
+  function(price) ______
+}
+vat_18 <- make_vat(______)
+vat_18(100)
+```
+
+::: {.hint exercise="ex17_factory"}
+::: {.callout-note collapse="false"}
+## Hint
+The inner function returns `price * (1 + rate)`. 18% is `0.18`.
+:::
+:::
+
+::: {.solution exercise="ex17_factory"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+make_vat <- function(rate) {
+  force(rate)
+  function(price) price * (1 + rate)
+}
+vat_18 <- make_vat(0.18)
+vat_18(100)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex17_factory
+#| check: true
+if (!exists("make_vat") || !is.function(make_vat)) {
+  list(correct = FALSE, message = "Create a function called make_vat.")
+} else if (!is.function(make_vat(0.1))) {
+  list(correct = FALSE, message = "make_vat() should return a function, not a number.")
+} else if (!isTRUE(all.equal(make_vat(0.1)(200), 220))) {
+  list(correct = FALSE, message = "make_vat(0.1)(200) should be 220. The inner function is price * (1 + rate).")
+} else if (!exists("vat_18") || !isTRUE(all.equal(vat_18(100), 118))) {
+  list(correct = FALSE, message = "vat_18(100) should be 118. Use make_vat(0.18).")
+} else {
+  list(correct = TRUE, message = "Correct. vat_18 remembers rate = 0.18 in its enclosing environment.")
+}
+```
+
+### Exercise 3: Look inside a closure
+
+`ugx` was made by a factory. Use `environment()` to get its enclosing environment, and pull out the value of `prefix` it remembers. Save it as `remembered`.
+
+```{webr}
+#| exercise: ex17_closure
+#| setup: true
+make_formatter <- function(prefix = "", suffix = "") {
+  force(prefix); force(suffix)
+  function(x) paste0(prefix, format(round(x), big.mark = ","), suffix)
+}
+ugx <- make_formatter(prefix = "UGX ")
+```
+
+```{webr}
+#| exercise: ex17_closure
+remembered <- environment(______)$______
+remembered
+```
+
+::: {.hint exercise="ex17_closure"}
+::: {.callout-note collapse="false"}
+## Hint
+`environment(ugx)` returns the environment. Take `$prefix` from it.
+:::
+:::
+
+::: {.solution exercise="ex17_closure"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+remembered <- environment(ugx)$prefix
+remembered
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex17_closure
+#| check: true
+if (!exists("remembered")) {
+  list(correct = FALSE, message = "Save the value as remembered.")
+} else if (identical(remembered, "UGX ")) {
+  list(correct = TRUE, message = "Correct. The factory's environment lives on inside ugx.")
+} else {
+  list(correct = FALSE, message = "Use environment(ugx)$prefix.")
+}
+```
+
+### Exercise 4: A counter with `<<-`
+
+Complete `make_tally()`. Each call to the returned function should **add `n` to a running total** (starting at 0) and return the new total.
+
+```{webr}
+#| exercise: ex17_tally
+make_tally <- function() {
+  total <- 0
+  function(n) {
+    total ______ total + n
+    total
+  }
+}
+tally <- make_tally()
+tally(5)
+tally(3)
+```
+
+::: {.hint exercise="ex17_tally"}
+::: {.callout-note collapse="false"}
+## Hint
+`<-` would create a new local `total` each time. Use `<<-` to change the `total` in the enclosing environment.
+:::
+:::
+
+::: {.solution exercise="ex17_tally"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+make_tally <- function() {
+  total <- 0
+  function(n) {
+    total <<- total + n
+    total
+  }
+}
+tally <- make_tally()
+tally(5)
+tally(3)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex17_tally
+#| check: true
+if (!exists("make_tally") || !is.function(make_tally)) {
+  list(correct = FALSE, message = "Keep the function make_tally.")
+} else {
+  t1 <- make_tally()
+  t2 <- make_tally()
+  a <- t1(5); b <- t1(3); c2 <- t2(1)
+  if (identical(c(a, b), c(5, 3))) {
+    list(correct = FALSE, message = "The total resets every call. Use <<- so the function changes the total in its enclosing environment.")
+  } else if (!identical(c(a, b), c(5, 8))) {
+    list(correct = FALSE, message = "tally(5) then tally(3) should return 5 then 8.")
+  } else if (!identical(c2, 1)) {
+    list(correct = FALSE, message = "Each tally should have its own total. Create total inside make_tally(), not globally.")
+  } else {
+    list(correct = TRUE, message = "Correct. Each tally keeps its own total, hidden in its own environment.")
+  }
+}
+```
+
+### Exercise 5: Many functions with `map()`
+
+Use the factory `power()` with `map()` to make a **list of three functions** that square, cube and raise to the fourth power. Then use `map_dbl()` to apply each one to `3`. Save the numbers as `results`.
+
+```{webr}
+#| exercise: ex17_map
+#| setup: true
+library(purrr)
+power <- function(exp) {
+  force(exp)
+  function(x) x^exp
+}
+```
+
+```{webr}
+#| exercise: ex17_map
+fns <- map(______, power)
+results <- map_dbl(fns, \(f) ______)
+results
+```
+
+::: {.hint exercise="ex17_map"}
+::: {.callout-note collapse="false"}
+## Hint
+The exponents are `2:4`. Inside the anonymous function, call `f(3)`.
+:::
+:::
+
+::: {.solution exercise="ex17_map"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+fns <- map(2:4, power)
+results <- map_dbl(fns, \(f) f(3))
+results
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex17_map
+#| check: true
+if (!exists("fns") || !is.list(fns) || length(fns) != 3 || !all(map_lgl(fns, is.function))) {
+  list(correct = FALSE, message = "fns should be a list of three functions. Use map(2:4, power).")
+} else if (!exists("results") || !is.numeric(results)) {
+  list(correct = FALSE, message = "results should be numbers. Use map_dbl().")
+} else if (identical(results, c(9, 27, 81))) {
+  list(correct = TRUE, message = "Correct: 9, 27 and 81. Each function remembers its own exponent.")
+} else {
+  list(correct = FALSE, message = "Expected 9, 27 and 81. Check the exponents (2:4) and call f(3).")
+}
+```
+
+## Your turn
+
+1. Write `make_rounder(digits)` that returns a function rounding numbers to that many decimal places. Use it to create `round1` and `round2`, and check what `environment(round1)$digits` holds.
+2. Remove `force()` from your `make_rounder()`. Can you write code that shows the lazy-evaluation surprise from this lesson?
+3. Write `make_id_maker(prefix)` that returns a function giving IDs in sequence: `"HH001"`, `"HH002"` and so on. (Hint: combine a counter with `str_pad()` or `sprintf("%03d", n)`.)
+
+```{webr}
+library(purrr)
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Relying on global variables inside functions.** The function's result then changes whenever the global value changes. Pass the value as an argument.
+- **Expecting a function to change an object outside it.** Assignment inside a function creates a local copy. Return the new value instead.
+- **Forgetting `force()` in a factory.** Lazy evaluation can then capture a later value of the argument.
+- **Using `<<-` as a shortcut.** It hides where state changes. Use it only for state that belongs to a closure.
+- **Masked functions.** If a function behaves unexpectedly, check `search()` and the "masked" messages from `library()`, or call it as `package::function()`.
+
+## Summary
+
+- An environment binds names to values and has a parent. R looks for a name in the current environment, then each parent in turn.
+- Each function call gets a new execution environment. Its parent is where the function was **defined** (lexical scoping).
+- Values are looked up when the function runs (dynamic lookup), and assignment inside a function never changes objects outside it.
+- A function factory returns functions. A function plus its remembered environment is a closure. Use `force()` on factory arguments.
+- `<<-` changes a binding in a parent environment. Use it only to keep state inside a closure.
+
+**Next:** on Day 18 you will build your own types of object with S3, S4 and R6.
+
+## Further reading
+
+- [Advanced R (2e), chapter 6: Functions](https://adv-r.hadley.nz/functions.html), chapter [7: Environments](https://adv-r.hadley.nz/environments.html) and chapter [10: Function factories](https://adv-r.hadley.nz/function-factories.html), by Hadley Wickham.
+- [R Language Definition: Scope of variables](https://cran.r-project.org/doc/manuals/r-release/R-lang.html#Scope-of-variables), the official manual.

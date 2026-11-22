@@ -1,0 +1,596 @@
+---
+title: "Day 21: Capstone project"
+subtitle: "Take an open dataset from import to tested functions, models, charts and a reproducible report, using every level of the course"
+webr:
+  packages:
+    - dplyr
+    - tidyr
+    - purrr
+    - ggplot2
+    - broom
+    - gapminder
+    - testthat
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Expert · **Time:** 3 hours or more · **Needs:** all earlier days · **Packages:** dplyr, tidyr, purrr, ggplot2, broom, gapminder, testthat · **Data:** `gapminder` · **The final report runs on your own computer**
+:::
+
+## Objectives
+
+By the end of today you will have:
+
+1. Turned a question into an analysis plan.
+2. Imported and validated a real open dataset.
+3. Written small, tested functions for each step.
+4. Fitted one model per country and summarised the results.
+5. Made charts that answer the question.
+6. Produced a reproducible Quarto report on your own computer.
+
+```{webr}
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(ggplot2)
+library(broom)
+library(gapminder)
+library(testthat)
+```
+
+## The brief
+
+You will analyse **gapminder**, which you first met on Day 8. It records life expectancy, population and GDP per person for 142 countries every five years from 1952 to 2007. The data comes from the [Gapminder Foundation](https://www.gapminder.org/) and is licensed CC BY 3.0.
+
+The question:
+
+> **How fast did life expectancy rise between 1952 and 2007, how did that differ between continents, and in which countries did a steady rise not happen?**
+
+Each part of today uses skills from earlier days. The day numbers in each heading show where to look if you need a reminder.
+
+| Stage | Days |
+|---|---|
+| 1. Import and check | 4, 5, 16 |
+| 2. Clean and derive | 6, 9, 11 |
+| 3. Functions and tests | 10, 16, 20 |
+| 4. Iterate and model | 12, 14 |
+| 5. Visualise | 8 |
+| 6. Report and share | 15, 20 |
+
+Work through the stages in order. Each one has an exercise that checks your work before you move on.
+
+## Stage 1: Import and check (Days 4, 5, 16)
+
+Start by looking at the data. Never skip this step.
+
+```{webr}
+glimpse(gapminder)
+summary(gapminder)
+gapminder |> count(continent)
+gapminder |> count(country) |> count(n, name = "countries")   # how many rows per country?
+```
+
+Every country has 12 rows, one for each survey year. Write that down as an **assumption**, because the rest of the analysis depends on it. On Day 16 you learnt to turn assumptions into checks that stop the code when they are broken. That is the first exercise.
+
+## Stage 2: Clean and derive (Days 6, 9, 11)
+
+gapminder is already tidy, which is unusual for real data. You still need some derived columns: total GDP, a readable version of it, and the number of years since the start, which makes model intercepts easier to read (Day 14).
+
+```{webr}
+gm <- gapminder |>
+  mutate(
+    gdp_billion = pop * gdpPercap / 1e9,
+    years_since_1952 = year - 1952,
+    income_group = case_when(
+      gdpPercap < 1000  ~ "low",
+      gdpPercap < 10000 ~ "middle",
+      .default = "high"
+    ),
+    income_group = factor(income_group, levels = c("low", "middle", "high"))
+  )
+
+gm |> filter(year == 2007) |> count(income_group)
+```
+
+## Stage 3: Functions and tests (Days 10, 16, 20)
+
+Wrap each step that you will use more than once in a function, and write a test for it. Later, if the data changes or you change the code, the tests tell you at once whether something broke.
+
+```{webr}
+life_gain <- function(df, from = 1952, to = 2007) {
+  stopifnot(all(c("country", "year", "lifeExp") %in% names(df)))
+  df |>
+    filter(year %in% c(from, to)) |>
+    select(country, year, lifeExp) |>
+    pivot_wider(names_from = year, values_from = lifeExp, names_prefix = "y") |>
+    mutate(gain = .data[[paste0("y", to)]] - .data[[paste0("y", from)]])
+}
+
+test_that("life_gain() measures the change between two years", {
+  toy <- data.frame(
+    country = c("A", "A", "B", "B"),
+    year    = c(1952, 2007, 1952, 2007),
+    lifeExp = c(40, 70, 50, 55)
+  )
+  out <- life_gain(toy)
+  expect_equal(out$gain, c(30, 5))
+  expect_error(life_gain(data.frame(x = 1)))
+})
+
+life_gain(gm) |> arrange(desc(gain)) |> head()
+```
+
+Notice that the test uses a tiny **made-up** data frame where you can work out the right answer by hand. That is much easier to check than real data.
+
+## Stage 4: Iterate and model (Days 12, 14)
+
+The gain from 1952 to 2007 uses only two points. A linear model uses all 12: its slope is the average rise in life expectancy **per year**, and its R² says how well a straight line describes the country's history.
+
+Fit one model per country with `nest()` and `map()`:
+
+```{webr}
+by_country <- gm |>
+  group_by(country, continent) |>
+  nest() |>
+  mutate(model = map(data, \(d) lm(lifeExp ~ years_since_1952, data = d))) |>
+  ungroup()
+
+by_country
+```
+
+Then pull out the parts you need with broom:
+
+```{webr}
+by_country |>
+  mutate(glance = map(model, glance)) |>
+  unnest(glance) |>
+  select(country, continent, r.squared) |>
+  arrange(r.squared) |>
+  head()
+```
+
+Low R² values mean that a straight line does not describe that country's history. These are the countries the third part of the question asks about.
+
+## Stage 5: Visualise (Day 8)
+
+Plot the countries where the straight line fits worst. Their stories are very different from the steady rise elsewhere:
+
+```{webr}
+worst <- by_country |>
+  mutate(r2 = map_dbl(model, \(m) glance(m)$r.squared)) |>
+  slice_min(r2, n = 6) |>
+  pull(country)
+
+gm |>
+  filter(country %in% worst) |>
+  ggplot(aes(x = year, y = lifeExp, colour = country)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  labs(
+    title = "Countries where life expectancy did not rise steadily",
+    x = NULL, y = "Life expectancy (years)", colour = NULL
+  ) +
+  theme_minimal()
+```
+
+All six are in Africa. In the five southern African countries, life expectancy fell sharply from the late 1980s, largely because of the HIV/AIDS epidemic. In Rwanda, the estimate falls to about 24 years in 1992, during the civil war that led up to the 1994 genocide. A model is only a summary. When it fits badly, look at the data and find out why.
+
+## Stage 6: Report and share (Days 15, 20)
+
+The last stage happens on your own computer. It is described in [Your turn](#your-turn) below.
+
+## Exercises
+
+### Exercise 1: Validate the data
+
+Write `check_gapminder()`. It should stop with the message shown if any of these assumptions is broken, and return `df` (invisibly) if all is well:
+
+- the columns `country`, `continent`, `year` and `lifeExp` exist;
+- `lifeExp` has no missing values;
+- every country has exactly 12 rows.
+
+```{webr}
+#| exercise: ex21_check
+#| setup: true
+library(dplyr)
+library(gapminder)
+```
+
+```{webr}
+#| exercise: ex21_check
+check_gapminder <- function(df) {
+  stopifnot(
+    "missing columns" = all(c("country", "continent", "year", "lifeExp") %in% names(df)),
+    "lifeExp has missing values" = ______,
+    "each country needs 12 rows" = all(table(df$country) == ______)
+  )
+  invisible(df)
+}
+check_gapminder(gapminder)
+"gapminder passed all checks"
+```
+
+::: {.hint exercise="ex21_check"}
+::: {.callout-note collapse="false"}
+## Hint
+"No missing values" is `!anyNA(df$lifeExp)`. The number of rows per country should be `12`.
+:::
+:::
+
+::: {.solution exercise="ex21_check"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+check_gapminder <- function(df) {
+  stopifnot(
+    "missing columns" = all(c("country", "continent", "year", "lifeExp") %in% names(df)),
+    "lifeExp has missing values" = !anyNA(df$lifeExp),
+    "each country needs 12 rows" = all(table(df$country) == 12)
+  )
+  invisible(df)
+}
+check_gapminder(gapminder)
+"gapminder passed all checks"
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex21_check
+#| check: true
+msg <- function(df) tryCatch({ check_gapminder(df); "ok" }, error = function(e) conditionMessage(e))
+with_na <- gapminder; with_na$lifeExp[5] <- NA
+short <- gapminder[-1, ]
+if (!exists("check_gapminder") || !is.function(check_gapminder)) {
+  list(correct = FALSE, message = "Create a function called check_gapminder.")
+} else if (msg(gapminder) != "ok") {
+  list(correct = FALSE, message = paste("The real data should pass, but gave:", msg(gapminder)))
+} else if (msg(with_na) != "lifeExp has missing values") {
+  list(correct = FALSE, message = "A missing lifeExp value should stop with \"lifeExp has missing values\". Use !anyNA(df$lifeExp).")
+} else if (msg(short) != "each country needs 12 rows") {
+  list(correct = FALSE, message = "Removing one row should stop with \"each country needs 12 rows\".")
+} else if (msg(select(gapminder, -continent)) != "missing columns") {
+  list(correct = FALSE, message = "Keep the check for missing columns.")
+} else {
+  list(correct = TRUE, message = "Correct. If a new version of the data breaks an assumption, the analysis stops and says why.")
+}
+```
+
+### Exercise 2: A derived column, with a test
+
+Write `add_gdp()`, which adds a column `gdp_billion`: population times GDP per person, divided by one billion (`1e9`). Then run the test, which uses a small made-up data frame.
+
+```{webr}
+#| exercise: ex21_gdp
+#| setup: true
+library(dplyr)
+library(testthat)
+```
+
+```{webr}
+#| exercise: ex21_gdp
+add_gdp <- function(df) {
+  df |> mutate(gdp_billion = ______)
+}
+
+test_that("add_gdp() calculates total GDP in billions", {
+  toy <- data.frame(pop = c(2e6, 5e7), gdpPercap = c(500, 2000))
+  expect_equal(add_gdp(toy)$gdp_billion, c(1, 100))
+})
+```
+
+::: {.hint exercise="ex21_gdp"}
+::: {.callout-note collapse="false"}
+## Hint
+Total GDP is `pop * gdpPercap`. Divide by `1e9` to get billions.
+:::
+:::
+
+::: {.solution exercise="ex21_gdp"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+add_gdp <- function(df) {
+  df |> mutate(gdp_billion = pop * gdpPercap / 1e9)
+}
+
+test_that("add_gdp() calculates total GDP in billions", {
+  toy <- data.frame(pop = c(2e6, 5e7), gdpPercap = c(500, 2000))
+  expect_equal(add_gdp(toy)$gdp_billion, c(1, 100))
+})
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex21_gdp
+#| check: true
+out <- tryCatch(add_gdp(data.frame(pop = 1e9, gdpPercap = 3)), error = function(e) NULL)
+if (!exists("add_gdp") || !is.function(add_gdp)) {
+  list(correct = FALSE, message = "Create a function called add_gdp.")
+} else if (is.null(out) || !"gdp_billion" %in% names(out)) {
+  list(correct = FALSE, message = "add_gdp() should add a column called gdp_billion.")
+} else if (isTRUE(all.equal(out$gdp_billion, 3))) {
+  list(correct = TRUE, message = "Correct, and your test confirms it.")
+} else {
+  list(correct = FALSE, message = "gdp_billion should be pop * gdpPercap / 1e9.")
+}
+```
+
+### Exercise 3: One model per country
+
+Fit `lm(lifeExp ~ year)` for every country, and build a data frame `slopes` with the columns `country`, `continent` and `slope` (the coefficient of `year`).
+
+```{webr}
+#| exercise: ex21_models
+#| setup: true
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(gapminder)
+```
+
+```{webr}
+#| exercise: ex21_models
+slopes <- gapminder |>
+  group_by(country, continent) |>
+  nest() |>
+  mutate(
+    model = map(data, \(d) ______),
+    slope = map_dbl(model, \(m) coef(m)[["year"]])
+  ) |>
+  ungroup() |>
+  select(country, continent, slope)
+slopes |> arrange(desc(slope)) |> head()
+```
+
+::: {.hint exercise="ex21_models"}
+::: {.callout-note collapse="false"}
+## Hint
+Inside the anonymous function, `d` is one country's rows: `lm(lifeExp ~ year, data = d)`.
+:::
+:::
+
+::: {.solution exercise="ex21_models"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+slopes <- gapminder |>
+  group_by(country, continent) |>
+  nest() |>
+  mutate(
+    model = map(data, \(d) lm(lifeExp ~ year, data = d)),
+    slope = map_dbl(model, \(m) coef(m)[["year"]])
+  ) |>
+  ungroup() |>
+  select(country, continent, slope)
+slopes |> arrange(desc(slope)) |> head()
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex21_models
+#| check: true
+expect_oman <- unname(coef(lm(lifeExp ~ year, data = filter(gapminder, country == "Oman")))["year"])
+if (!exists("slopes") || !is.data.frame(slopes)) {
+  list(correct = FALSE, message = "Save the result as slopes.")
+} else if (!all(c("country", "continent", "slope") %in% names(slopes))) {
+  list(correct = FALSE, message = "slopes needs the columns country, continent and slope.")
+} else if (nrow(slopes) != 142) {
+  list(correct = FALSE, message = "There should be one row per country (142).")
+} else if (!isTRUE(all.equal(slopes$slope[slopes$country == "Oman"], expect_oman))) {
+  list(correct = FALSE, message = "The slopes are not right. Fit lm(lifeExp ~ year, data = d) inside map().")
+} else {
+  list(correct = TRUE, message = paste0("Correct. The fastest rise was in ", slopes$country[which.max(slopes$slope)], ", at about ", round(max(slopes$slope), 2), " years of life expectancy per calendar year."))
+}
+```
+
+### Exercise 4: Summarise by continent
+
+Using `slopes`, find the **median** slope for each continent. Name the column `median_slope` and sort from the fastest to the slowest rise. Save the result as `continent_rates`.
+
+```{webr}
+#| exercise: ex21_continent
+#| setup: true
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(gapminder)
+slopes <- gapminder |>
+  group_by(country, continent) |>
+  nest() |>
+  mutate(slope = map_dbl(data, \(d) coef(lm(lifeExp ~ year, data = d))[["year"]])) |>
+  ungroup() |>
+  select(country, continent, slope)
+```
+
+```{webr}
+#| exercise: ex21_continent
+continent_rates <- slopes |>
+  group_by(______) |>
+  summarise(median_slope = ______) |>
+  arrange(______)
+continent_rates
+```
+
+::: {.hint exercise="ex21_continent"}
+::: {.callout-note collapse="false"}
+## Hint
+Group by `continent`, use `median(slope)`, and sort with `arrange(desc(median_slope))`.
+:::
+:::
+
+::: {.solution exercise="ex21_continent"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+continent_rates <- slopes |>
+  group_by(continent) |>
+  summarise(median_slope = median(slope)) |>
+  arrange(desc(median_slope))
+continent_rates
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex21_continent
+#| check: true
+truth <- c(tapply(slopes$slope, slopes$continent, median))
+truth <- sort(truth, decreasing = TRUE)
+if (!exists("continent_rates") || !all(c("continent", "median_slope") %in% names(continent_rates))) {
+  list(correct = FALSE, message = "continent_rates needs the columns continent and median_slope.")
+} else if (!isTRUE(all.equal(sort(continent_rates$median_slope), sort(unname(truth))))) {
+  list(correct = FALSE, message = "Use median(slope) for each continent.")
+} else if (!identical(as.character(continent_rates$continent), names(truth))) {
+  list(correct = FALSE, message = "Sort from the fastest rise to the slowest: arrange(desc(median_slope)).")
+} else {
+  list(correct = TRUE, message = paste0("Correct. Life expectancy rose fastest in ", names(truth)[1], " and slowest in ", names(truth)[length(truth)], ", where it was already high in 1952."))
+}
+```
+
+### Exercise 5: Chart the answer
+
+Draw a box plot of `slope` for each `continent`, with the continent on the x axis. Save the plot as `p`.
+
+```{webr}
+#| exercise: ex21_plot
+#| setup: true
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(ggplot2)
+library(gapminder)
+slopes <- gapminder |>
+  group_by(country, continent) |>
+  nest() |>
+  mutate(slope = map_dbl(data, \(d) coef(lm(lifeExp ~ year, data = d))[["year"]])) |>
+  ungroup() |>
+  select(country, continent, slope)
+```
+
+```{webr}
+#| exercise: ex21_plot
+p <- ggplot(slopes, aes(x = ______, y = ______)) +
+  ______() +
+  labs(x = NULL, y = "Rise in life expectancy (years per year)")
+p
+```
+
+::: {.hint exercise="ex21_plot"}
+::: {.callout-note collapse="false"}
+## Hint
+`x = continent`, `y = slope`, and the layer is `geom_boxplot()`.
+:::
+:::
+
+::: {.solution exercise="ex21_plot"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+p <- ggplot(slopes, aes(x = continent, y = slope)) +
+  geom_boxplot() +
+  labs(x = NULL, y = "Rise in life expectancy (years per year)")
+p
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex21_plot
+#| check: true
+if (!exists("p") || !inherits(p, "ggplot")) {
+  list(correct = FALSE, message = "Save the plot as p.")
+} else {
+  x <- rlang::as_label(p$mapping$x)
+  y <- rlang::as_label(p$mapping$y)
+  has_box <- any(vapply(p$layers, \(l) inherits(l$geom, "GeomBoxplot"), logical(1)))
+  if (!identical(c(x, y), c("continent", "slope"))) {
+    list(correct = FALSE, message = "Put continent on the x axis and slope on the y axis.")
+  } else if (!has_box) {
+    list(correct = FALSE, message = "Add geom_boxplot().")
+  } else {
+    list(correct = TRUE, message = "Correct. The low outliers in Africa are the countries from Stage 5.")
+  }
+}
+```
+
+## Your turn {#your-turn}
+
+This is the capstone itself. Do it on your own computer, in an RStudio Project.
+
+1. **Write the report.** Create `life-expectancy.qmd` (Day 15). It should:
+    - state the question in the first paragraph;
+    - load the packages and data, and run `check_gapminder()`, in a chunk with `include: false`;
+    - use inline code for every number in the text;
+    - include the continent table (with `kable()`), the box plot from Exercise 5 and the chart of the countries that did not rise steadily, each with a caption;
+    - end with a short conclusion that answers all three parts of the question, and a `sessionInfo()` chunk.
+2. **Put your functions in their own file.** Move `check_gapminder()`, `add_gdp()` and `life_gain()` to `R/functions.R`, load them in the report with `source("R/functions.R")`, and put their tests in `tests/test-functions.R`. Run the tests with `testthat::test_file("tests/test-functions.R")`.
+3. **Render** to HTML, then render again from a fresh R session (Session → Restart R) to prove it is reproducible.
+4. **Stretch goals:**
+    - Make the continent a parameter and render one report per continent with `walk()` (Days 12 and 15).
+    - Turn the functions into a small package with documentation and tests, and run `devtools::check()` (Day 20).
+    - Add a model of `lifeExp ~ log(gdpPercap) + continent` for 2007 and discuss what it shows (Day 14).
+    - Put the project on GitHub so others can see your work.
+
+### Checklist before you share it
+
+- [ ] The report renders from a fresh session with no errors.
+- [ ] Every number in the text comes from inline code.
+- [ ] Every chart has a title or caption, labelled axes and units.
+- [ ] Every function has at least one test, and all tests pass.
+- [ ] Paths are relative, and there is no `setwd()`.
+- [ ] The data source and its licence are credited.
+
+You can try pieces of the report here first:
+
+```{webr}
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(ggplot2)
+library(broom)
+library(gapminder)
+library(testthat)
+# Your code here
+
+```
+
+## Course complete
+
+You have finished all 21 days. You started by typing `1 + 1` into R. You can now import, clean, reshape and join data; make publication-quality charts; write functions, tests and packages; fit and check statistical models; and produce reports that rebuild themselves when the data changes. You also understand how R works underneath: environments, objects and performance.
+
+21 days is a start, not an end. Fluency comes from using R on real problems. Some ways to keep going:
+
+- **Use R for your next real task**, even if Excel would be faster this time.
+- **Read other people's code.** [TidyTuesday](https://github.com/rfordatascience/tidytuesday) publishes a new dataset every week, and hundreds of people share their analyses.
+- **Go deeper** with the books in this course's further reading, especially *R for Data Science*, *Advanced R* and *R Packages*.
+- **Learn Shiny** to turn your analysis into an interactive web app: [Mastering Shiny](https://mastering-shiny.org/), by Hadley Wickham, is free online.
+- **Ask and answer questions** on [Posit Community](https://forum.posit.co/) or Stack Overflow, with a reprex (Day 16).
+
+If this course helped you, or you found a mistake, [open an issue](https://github.com/iAthman83/21-Days-of-R/issues) on GitHub.
+
+## Common mistakes
+
+- **Starting with code instead of the question.** Write the question first, then plan the stages.
+- **Skipping the checks.** A wrong assumption at Stage 1 makes every later result wrong.
+- **One huge script.** Break the work into small functions, each with a test.
+- **Trusting a model without looking at the data.** Low R² values and outliers are often the most interesting part.
+- **A report that only renders on your computer.** Render from a fresh session before you share it.
+
+## Summary
+
+- A good analysis starts with a clear question and moves through stages: import and check, clean, functions and tests, model, visualise, report.
+- Turn assumptions into checks with `stopifnot()`, so broken data stops the analysis.
+- Test functions on tiny made-up data where you know the answer.
+- `nest()`, `map()` and broom fit and summarise one model per group.
+- When a model fits badly, plot the data and find out why.
+- A Quarto report with inline code, tested functions and relative paths is reproducible by anyone.
+
+## Further reading
+
+- [R for Data Science (2e), chapter "Whole game"](https://r4ds.hadley.nz/whole-game), which follows the same stages as today.
+- [The Gapminder Foundation](https://www.gapminder.org/), for the story behind the data.
+- [Telling Stories with Data](https://tellingstorieswithdata.com/), by Rohan Alexander, on doing reproducible analysis from start to finish. Free online.

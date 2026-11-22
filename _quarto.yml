@@ -58,6 +58,13 @@ website:
           - lessons/day-14-modelling.qmd
           - lessons/day-15-quarto-reports.qmd
           - lessons/day-16-debugging.qmd
+      - section: "Level 4: Expert"
+        contents:
+          - lessons/day-17-environments.qmd
+          - lessons/day-18-oop.qmd
+          - lessons/day-19-performance.qmd
+          - lessons/day-20-packages.qmd
+          - lessons/day-21-capstone.qmd
   page-footer:
     left: "© 2026 Abubakar Athman. Lessons CC BY 4.0, code MIT."
     right: "Built with [Quarto](https://quarto.org) and [webR](https://docs.r-wasm.org/webr/latest/)."

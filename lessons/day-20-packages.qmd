@@ -1,0 +1,637 @@
+---
+title: "Day 20: Writing an R package"
+subtitle: "Turn your functions into a package with a clear structure, documentation written with roxygen2, and tests written with testthat"
+webr:
+  packages:
+    - testthat
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Expert · **Time:** about 3 hours · **Needs:** [Day 10](day-10-functions.qmd) and [Day 16](day-16-debugging.qmd) · **Packages:** testthat (in the browser); devtools, usethis and roxygen2 (on your computer) · **Needs R on your computer** for building
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Explain why a package is the best home for functions you reuse.
+2. Describe the files and folders in a package, and what each one does.
+3. Document functions with roxygen2 comments.
+4. Write unit tests with testthat.
+5. Build, check and install a package with devtools.
+
+::: {.callout-important}
+## Part of today runs on your own computer
+Creating, building and checking a package needs R and RStudio on your computer. Follow the [setup guide](../setup.qmd), then install the tools once:
+
+```r
+install.packages(c("devtools", "usethis", "roxygen2", "testthat"))
+```
+
+You can do the exercises here in the browser. They cover the parts you write by hand: tests, documentation comments and the `DESCRIPTION` file.
+:::
+
+```{webr}
+library(testthat)
+```
+
+## Why write a package?
+
+Once you have functions you use in more than one project, copying a `helpers.R` file between folders stops working. Copies drift apart, bugs get fixed in one place but not another, and nobody remembers which version is current.
+
+A **package** solves this. It gives your functions:
+
+- **one home**, installed once and loaded with `library()`;
+- **documentation**, so `?your_function` works for you and your colleagues;
+- **tests** that run with one command and tell you when a change breaks something;
+- **a version number**, so you know which code produced which result;
+- **an easy way to share**, through GitHub or CRAN.
+
+A package does not have to be public or polished. A small package for your team's cleaning functions is a very good use of one.
+
+## The structure of a package
+
+A package is a folder with a fixed layout:
+
+```
+surveytools/
+├── DESCRIPTION        what the package is, who wrote it, what it needs
+├── NAMESPACE          which functions are exported (written for you by roxygen2)
+├── LICENSE            the licence (added by usethis)
+├── R/                 your functions, in .R files
+│   ├── clean.R
+│   └── summarise.R
+├── man/               help pages (written for you by roxygen2)
+├── tests/
+│   ├── testthat.R
+│   └── testthat/      your tests
+│       └── test-clean.R
+└── README.md          what a visitor sees first on GitHub
+```
+
+You write `DESCRIPTION`, the files in `R/` and the files in `tests/testthat/`. Tools generate most of the rest.
+
+### `DESCRIPTION`
+
+`DESCRIPTION` is a text file of `Field: value` lines:
+
+```
+Package: surveytools
+Title: Clean and Summarise Household Survey Data
+Version: 0.1.0
+Authors@R: person("Ada", "Lovelace", email = "ada@example.org", role = c("aut", "cre"))
+Description: Functions to standardise household IDs, validate survey
+    data and produce district summaries.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports:
+    dplyr,
+    stringr
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+```
+
+- **Package** may contain only letters, numbers and dots, and must start with a letter.
+- **Title** is one line in title case, without a full stop.
+- **Version** usually starts at `0.1.0`. Increase it when you release changes.
+- **Imports** lists packages your functions need. They are installed with yours.
+- **Suggests** lists packages needed only for tests or examples.
+
+You can read a `DESCRIPTION` file in R with `read.dcf()`:
+
+```{webr}
+desc_text <- "Package: surveytools
+Title: Clean and Summarise Household Survey Data
+Version: 0.1.0
+Imports: dplyr, stringr"
+
+desc <- read.dcf(textConnection(desc_text))
+desc[, "Package"]
+desc[, "Imports"]
+```
+
+## The package workflow
+
+::: {.callout-important}
+## Run this on your own computer
+**1. Create the package.** In the RStudio Console:
+
+```r
+usethis::create_package("~/projects/surveytools")
+```
+
+A new RStudio session opens in the package folder.
+
+**2. Add a licence and a first function file:**
+
+```r
+usethis::use_mit_license()
+usethis::use_r("clean")        # creates and opens R/clean.R
+```
+
+**3. Write your function in `R/clean.R`**, with roxygen2 comments above it (see the next section).
+
+**4. Load it and try it.** `load_all()` loads every function in `R/` as if the package were installed. Run it every time you change the code (shortcut: Ctrl+Shift+L, or Cmd+Shift+L on a Mac):
+
+```r
+devtools::load_all()
+clean_id(" hh1 ")
+```
+
+**5. Generate the documentation:**
+
+```r
+devtools::document()           # writes man/ and NAMESPACE from your comments
+?clean_id                      # your help page
+```
+
+**6. Add tests:**
+
+```r
+usethis::use_testthat()        # once per package
+usethis::use_test("clean")     # creates tests/testthat/test-clean.R
+devtools::test()               # runs all tests
+```
+
+**7. Declare the packages you use:**
+
+```r
+usethis::use_package("stringr")   # adds stringr to Imports in DESCRIPTION
+```
+
+Then call its functions as `stringr::str_pad()` inside your package. Do **not** put `library()` calls in package code.
+
+**8. Check the whole package:**
+
+```r
+devtools::check()
+```
+
+`check()` runs R's full set of package checks: it builds the package, runs the tests and examples, and looks for missing documentation and undeclared dependencies. Aim for **0 errors, 0 warnings, 0 notes**.
+
+**9. Install it and share it:**
+
+```r
+devtools::install()                          # install on your computer
+# after pushing the folder to GitHub:
+# remotes::install_github("your-name/surveytools")
+```
+:::
+
+The cycle you will repeat most is: **edit, `load_all()`, try, test**.
+
+## Documentation with roxygen2
+
+**roxygen2** turns special comments, starting with `#'`, into help pages. You write them directly above each function:
+
+```r
+#' Standardise household IDs
+#'
+#' Removes spaces, converts to upper case and pads the number to three
+#' digits, so " hh1 " becomes "HH001".
+#'
+#' @param x A character vector of household IDs.
+#' @param width Number of digits in the padded number.
+#'
+#' @return A character vector the same length as `x`.
+#' @export
+#'
+#' @examples
+#' clean_id(c(" hh1 ", "HH 25"))
+clean_id <- function(x, width = 3) {
+  number <- stringr::str_extract(x, "\\d+")
+  paste0("HH", stringr::str_pad(number, width = width, pad = "0"))
+}
+```
+
+| Tag | Means |
+|---|---|
+| first line | the title of the help page |
+| next paragraph | the description |
+| `@param name` | one per argument: what it is |
+| `@return` | what the function returns |
+| `@export` | make the function available to users after `library()` |
+| `@examples` | code that runs when someone calls `example()`, and during `check()` |
+
+Functions without `@export` are **internal**: your other functions can use them, but users do not see them. Keep helpers internal so you are free to change them.
+
+## Tests with testthat
+
+A **unit test** runs a function on a known input and checks the output. Tests catch the bugs you would otherwise find months later in a report.
+
+### Expectations
+
+An **expectation** checks one thing. It does nothing if the check passes and gives an error if it fails:
+
+```{webr}
+expect_equal(round(2.567, 1), 2.6)          # passes silently
+expect_true(is.numeric(42))
+expect_length(1:3, 3)
+expect_error(log("a"))                       # passes: log("a") does give an error
+```
+
+```{webr}
+expect_equal(round(2.567, 1), 2.5) # Error expected: the expectation fails
+```
+
+The expectations you will use most:
+
+| Expectation | Checks that… |
+|---|---|
+| `expect_equal(x, y)` | `x` equals `y`, allowing for tiny rounding differences |
+| `expect_identical(x, y)` | `x` is exactly `y`, including type |
+| `expect_true(x)`, `expect_false(x)` | `x` is `TRUE` or `FALSE` |
+| `expect_error(code)` | the code gives an error. Add a pattern to check the message: `expect_error(code, "must be numeric")` |
+| `expect_warning(code)` | the code gives a warning |
+| `expect_length(x, n)` | `x` has `n` elements |
+| `expect_type(x, "character")` | `x` has that type |
+
+### `test_that()`
+
+Group related expectations into a test with a short description of the behaviour:
+
+```{webr}
+clean_id <- function(x, width = 3) {
+  number <- regmatches(x, regexpr("[0-9]+", x))
+  paste0("HH", formatC(as.integer(number), width = width, flag = "0"))
+}
+
+test_that("clean_id() standardises IDs", {
+  expect_equal(clean_id(" hh1 "), "HH001")
+  expect_equal(clean_id("HH 25"), "HH025")
+  expect_length(clean_id(c("hh1", "hh2")), 2)
+})
+```
+
+In a package, tests live in files such as `tests/testthat/test-clean.R`, and `devtools::test()` runs them all and prints a summary.
+
+### What to test
+
+- **Typical inputs**: the cases you wrote the function for.
+- **Edge cases**: an empty vector, a single value, `NA`, very large numbers.
+- **Errors**: bad input should fail with the message you wrote (Day 16).
+- **Every bug you fix.** Write a test that fails because of the bug, then fix the code. The bug can never come back unnoticed.
+
+```{webr}
+percent <- function(part, total) {
+  if (!is.numeric(part) || !is.numeric(total)) stop("`part` and `total` must be numeric.")
+  100 * part / total
+}
+
+test_that("percent() works and fails clearly", {
+  expect_equal(percent(1, 4), 25)
+  expect_equal(percent(c(1, 2), 4), c(25, 50))
+  expect_true(is.na(percent(NA_real_, 4)))
+  expect_error(percent("1", 4), "must be numeric")
+})
+```
+
+::: {.callout-tip}
+## Write the test first
+Some programmers write the test **before** the function. It forces you to decide exactly what the function should do, and you know you are finished when the test passes. This is called test-driven development.
+:::
+
+::: {.callout-tip}
+## Excel bridge
+In a spreadsheet, you might check a total by adding it up a second way in a cell off to the side. Tests are those check cells, written down once and run every time anything changes.
+:::
+
+## Exercises
+
+### Exercise 1: Write a `DESCRIPTION`
+
+Complete the `DESCRIPTION` text for a package called `cropstats`, with the title `Summarise Crop Yields`, version `0.1.0` and `MIT + file LICENSE` as the licence.
+
+```{webr}
+#| exercise: ex20_desc
+desc_text <- "Package: ______
+Title: ______
+Version: ______
+License: ______"
+read.dcf(textConnection(desc_text))
+```
+
+::: {.hint exercise="ex20_desc"}
+::: {.callout-note collapse="false"}
+## Hint
+Each line is `Field: value`, with no quotes around the value: for example `Package: cropstats`.
+:::
+:::
+
+::: {.solution exercise="ex20_desc"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+desc_text <- "Package: cropstats
+Title: Summarise Crop Yields
+Version: 0.1.0
+License: MIT + file LICENSE"
+read.dcf(textConnection(desc_text))
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex20_desc
+#| check: true
+d <- tryCatch(read.dcf(textConnection(desc_text)), error = function(e) NULL)
+field <- function(f) if (!is.null(d) && f %in% colnames(d)) unname(d[1, f]) else NA_character_
+if (is.null(d)) {
+  list(correct = FALSE, message = "The text cannot be read. Each line should be Field: value.")
+} else if (grepl("\"", paste(d, collapse = ""))) {
+  list(correct = FALSE, message = "Remove the quotes. DESCRIPTION values are written without them.")
+} else if (!identical(field("Package"), "cropstats")) {
+  list(correct = FALSE, message = "Package should be cropstats.")
+} else if (!identical(field("Title"), "Summarise Crop Yields")) {
+  list(correct = FALSE, message = "Title should be Summarise Crop Yields.")
+} else if (!identical(field("Version"), "0.1.0")) {
+  list(correct = FALSE, message = "Version should be 0.1.0.")
+} else if (!identical(field("License"), "MIT + file LICENSE")) {
+  list(correct = FALSE, message = "License should be MIT + file LICENSE.")
+} else {
+  list(correct = TRUE, message = "Correct. That is a valid start to a DESCRIPTION file.")
+}
+```
+
+### Exercise 2: Document a function
+
+Write roxygen2 comments for `yield_per_acre()`. Include a title, an `@param` line for **each** argument, a `@return` line and `@export`. Save the comment lines as the character vector `doc`.
+
+```{webr}
+#| exercise: ex20_roxygen
+yield_per_acre <- function(yield_kg, acres) yield_kg / acres
+
+doc <- c(
+  "#' Yield per acre",
+  "#'",
+  "#' @param yield_kg ______",
+  "#' @param ______ Area planted, in acres.",
+  "#' @return ______",
+  "#' ______"
+)
+cat(doc, sep = "\n")
+```
+
+::: {.hint exercise="ex20_roxygen"}
+::: {.callout-note collapse="false"}
+## Hint
+Describe `yield_kg` in a few words, add `@param acres`, describe the result after `@return`, and make the last line `#' @export`.
+:::
+:::
+
+::: {.solution exercise="ex20_roxygen"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+yield_per_acre <- function(yield_kg, acres) yield_kg / acres
+
+doc <- c(
+  "#' Yield per acre",
+  "#'",
+  "#' @param yield_kg Total harvest, in kilograms.",
+  "#' @param acres Area planted, in acres.",
+  "#' @return A number: kilograms per acre.",
+  "#' @export"
+)
+cat(doc, sep = "\n")
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex20_roxygen
+#| check: true
+if (!exists("doc") || !is.character(doc)) {
+  list(correct = FALSE, message = "Save the comment lines as the character vector doc.")
+} else if (any(grepl("______", doc, fixed = TRUE))) {
+  list(correct = FALSE, message = "Fill in every blank.")
+} else if (!all(startsWith(doc, "#'"))) {
+  list(correct = FALSE, message = "Every roxygen2 line starts with #' (a hash and an apostrophe).")
+} else {
+  params <- sub("^#'\\s*@param\\s+(\\S+).*$", "\\1", grep("@param", doc, value = TRUE))
+  if (!setequal(params, names(formals(yield_per_acre)))) {
+    list(correct = FALSE, message = "There should be one @param line for each argument: yield_kg and acres.")
+  } else if (any(grepl("^#'\\s*@param\\s+\\S+\\s*$", doc))) {
+    list(correct = FALSE, message = "Each @param needs a description after the argument name.")
+  } else if (!any(grepl("^#'\\s*@return\\s+\\S", doc))) {
+    list(correct = FALSE, message = "Describe the result after @return.")
+  } else if (!any(grepl("^#'\\s*@export\\s*$", doc))) {
+    list(correct = FALSE, message = "Add #' @export so users can call the function.")
+  } else {
+    list(correct = TRUE, message = "Correct. devtools::document() would turn this into a help page.")
+  }
+}
+```
+
+### Exercise 3: Write expectations
+
+Write a `test_that()` block for `to_celsius()` with **two** expectations: `to_celsius(212)` equals `100`, and `to_celsius("hot")` gives an error.
+
+```{webr}
+#| exercise: ex20_expect
+#| setup: true
+library(testthat)
+to_celsius <- function(f) {
+  if (!is.numeric(f)) stop("`f` must be numeric.")
+  (f - 32) * 5 / 9
+}
+```
+
+```{webr}
+#| exercise: ex20_expect
+test_that("to_celsius() converts and validates", {
+  ______(to_celsius(212), 100)
+  ______(to_celsius("hot"))
+})
+```
+
+::: {.hint exercise="ex20_expect"}
+::: {.callout-note collapse="false"}
+## Hint
+Use `expect_equal()` for the first and `expect_error()` for the second.
+:::
+:::
+
+::: {.solution exercise="ex20_expect"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+test_that("to_celsius() converts and validates", {
+  expect_equal(to_celsius(212), 100)
+  expect_error(to_celsius("hot"))
+})
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex20_expect
+#| check: true
+if (isTRUE(.result)) {
+  list(correct = TRUE, message = "Correct. Both expectations passed.")
+} else {
+  list(correct = FALSE, message = "The test did not pass. Use expect_equal(to_celsius(212), 100) and expect_error(to_celsius(\"hot\")).")
+}
+```
+
+### Exercise 4: Fix the code to pass the tests
+
+These tests describe what `clean_district()` should do, but the function has a bug: it does not remove spaces. Fix the function so that all the tests pass when you run `run_tests(clean_district)`.
+
+```{webr}
+#| exercise: ex20_fix
+#| setup: true
+library(testthat)
+run_tests <- function(clean_district) {
+  expect_equal(clean_district("gulu"), "Gulu")
+  expect_equal(clean_district("  ARUA "), "Arua")
+  expect_equal(clean_district("mbale  town"), "Mbale Town")
+  "all tests passed"
+}
+```
+
+```{webr}
+#| exercise: ex20_fix
+clean_district <- function(x) {
+  x <- tolower(x)
+  x <- gsub("\\b([a-z])", "\\U\\1", x, perl = TRUE)   # capitalise each word
+  x
+}
+run_tests(clean_district)
+```
+
+::: {.hint exercise="ex20_fix"}
+::: {.callout-note collapse="false"}
+## Hint
+Add a line that removes extra spaces: `x <- trimws(gsub(" +", " ", x))` replaces runs of spaces with one space and trims the ends.
+:::
+:::
+
+::: {.solution exercise="ex20_fix"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+clean_district <- function(x) {
+  x <- tolower(x)
+  x <- trimws(gsub(" +", " ", x))
+  x <- gsub("\\b([a-z])", "\\U\\1", x, perl = TRUE)   # capitalise each word
+  x
+}
+run_tests(clean_district)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex20_fix
+#| check: true
+res <- tryCatch(run_tests(clean_district), error = function(e) conditionMessage(e))
+if (identical(res, "all tests passed")) {
+  list(correct = TRUE, message = "Correct. The tests told you exactly when the bug was fixed.")
+} else {
+  list(correct = FALSE, message = paste("A test still fails:", res))
+}
+```
+
+### Exercise 5: Write a test that catches a bug
+
+A good test **fails** when the code is wrong. Write `check_mean_size(f)`: it takes a function `f` and uses `expect_equal()` to check that `f(c(2, 4, NA))` equals `3`. The correct version of the function ignores `NA`. The buggy version does not.
+
+```{webr}
+#| exercise: ex20_catch
+#| setup: true
+library(testthat)
+good_mean <- function(x) mean(x, na.rm = TRUE)
+buggy_mean <- function(x) mean(x)
+```
+
+```{webr}
+#| exercise: ex20_catch
+check_mean_size <- function(f) {
+  ______(f(c(2, 4, NA)), ______)
+}
+check_mean_size(good_mean)
+```
+
+::: {.hint exercise="ex20_catch"}
+::: {.callout-note collapse="false"}
+## Hint
+Inside the function: `expect_equal(f(c(2, 4, NA)), 3)`. Try `check_mean_size(buggy_mean)` afterwards: it should fail.
+:::
+:::
+
+::: {.solution exercise="ex20_catch"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+check_mean_size <- function(f) {
+  expect_equal(f(c(2, 4, NA)), 3)
+}
+check_mean_size(good_mean)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex20_catch
+#| check: true
+passes_good <- tryCatch({ check_mean_size(good_mean); TRUE }, error = function(e) FALSE)
+catches_bug <- tryCatch({ check_mean_size(buggy_mean); FALSE }, error = function(e) TRUE)
+if (!exists("check_mean_size") || !is.function(check_mean_size)) {
+  list(correct = FALSE, message = "Create a function called check_mean_size.")
+} else if (!passes_good) {
+  list(correct = FALSE, message = "The test fails on the correct function. good_mean(c(2, 4, NA)) is 3.")
+} else if (!catches_bug) {
+  list(correct = FALSE, message = "The test passes on the buggy function too, so it would not catch the bug. Check against the value 3.")
+} else {
+  list(correct = TRUE, message = "Correct. Your test passes on good code and fails on buggy code, which is exactly what a test is for.")
+}
+```
+
+## Your turn
+
+Do this on your own computer.
+
+1. Create a package called `surveytools` with `usethis::create_package()`.
+2. Move two functions you wrote on Days 10 and 16 into `R/`. Document them with roxygen2, run `devtools::document()` and check that `?your_function` works.
+3. Add a test file for each function with at least three expectations, including one `expect_error()`. Run `devtools::test()`.
+4. Run `devtools::check()` and fix every error, warning and note.
+5. Optional: put the package on GitHub and install it on another computer with `remotes::install_github()`.
+
+You can practise tests here first:
+
+```{webr}
+library(testthat)
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Using `library()` inside package code.** Declare the dependency with `usethis::use_package()` and call functions as `pkg::fun()`.
+- **Editing `NAMESPACE` or files in `man/` by hand.** roxygen2 overwrites them. Change the `#'` comments and run `devtools::document()`.
+- **Forgetting `@export`.** The function then works with `load_all()` but is missing after `library()`.
+- **Tests that cannot fail.** `expect_true(TRUE)` always passes. Check that each test fails when the code is wrong.
+- **Testing only the happy path.** Include edge cases and bad input.
+- **Ignoring notes from `check()`.** They often point to real problems, such as an undeclared dependency.
+
+## Summary
+
+- A package gives reusable functions one home, with documentation, tests, a version and an easy way to share them.
+- A package has `DESCRIPTION`, `NAMESPACE`, `R/`, `man/` and `tests/testthat/`. You write `DESCRIPTION`, `R/` and the tests.
+- usethis creates files (`create_package()`, `use_r()`, `use_test()`, `use_package()`). devtools runs the workflow (`load_all()`, `document()`, `test()`, `check()`, `install()`).
+- roxygen2 comments (`#'`) with `@param`, `@return`, `@export` and `@examples` become help pages.
+- testthat expectations such as `expect_equal()` and `expect_error()` go inside `test_that()` blocks. Test typical cases, edge cases, errors and every bug you fix.
+
+**Next:** Day 21 is the capstone project, where you use everything from the course on one dataset.
+
+## Further reading
+
+- [R Packages (2e)](https://r-pkgs.org/), by Hadley Wickham and Jennifer Bryan. Free online. Chapter 1, "The whole game", builds a small package from start to finish.
+- [testthat documentation](https://testthat.r-lib.org/) and [roxygen2 documentation](https://roxygen2.r-lib.org/).
+- [Happy Git and GitHub for the useR](https://happygitwithr.com/), by Jennifer Bryan, for putting your package on GitHub.

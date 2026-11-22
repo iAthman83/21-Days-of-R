@@ -1,0 +1,591 @@
+---
+title: "Day 19: Performance"
+subtitle: "Measure before you optimise, find the slow part, speed it up with vectorisation and pre-allocation, and handle large data with data.table"
+webr:
+  packages:
+    - bench
+    - data.table
+    - dplyr
+    - purrr
+  resources:
+    - ../data/household-survey.csv
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+**Level:** Expert · **Time:** about 2.5 hours · **Needs:** [Day 12](day-12-purrr.qmd) and [Day 17](day-17-environments.qmd) · **Packages:** bench, data.table, dplyr, purrr · **Data:** `data/household-survey.csv`
+:::
+
+## Objectives
+
+By the end of today you will be able to:
+
+1. Time code with `system.time()` and compare versions with `bench::mark()`.
+2. Find the slow part of a script with a profiler.
+3. Replace loops with vectorised code.
+4. Avoid growing objects inside loops.
+5. Read, summarise and change large tables with data.table.
+
+```{webr}
+library(bench)
+library(data.table)
+library(dplyr)
+library(purrr)
+hh <- read.csv("data/household-survey.csv")
+```
+
+::: {.callout-note}
+## Timings in the browser
+R runs more slowly in the browser than on your computer, and timings vary from run to run. Compare versions **with each other**, not with the numbers in this text.
+:::
+
+## First, measure
+
+> "Premature optimisation is the root of all evil." (Donald Knuth)
+
+Most code is fast enough. Making code faster takes time and often makes it harder to read. So before you change anything, answer two questions: **is it actually too slow**, and **which part is slow**? Guessing is usually wrong.
+
+### `system.time()`
+
+`system.time()` runs code once and reports how long it took. `elapsed` is the time you waited.
+
+```{webr}
+system.time(for (i in 1:1e5) sqrt(i))
+system.time(sqrt(1:1e5))
+```
+
+### `bench::mark()`
+
+A single run is noisy. `bench::mark()` runs each version many times, checks that they all give the **same result**, and reports the typical time and the memory used:
+
+```{webr}
+x <- runif(1e4)
+
+bench::mark(
+  loop = {
+    total <- 0
+    for (v in x) total <- total + v
+    total
+  },
+  vectorised = sum(x)
+) |> print()
+```
+
+Read the `median` column (the typical time) and `mem_alloc` (memory used). `itr/sec` is how many times per second it can run. If the results differ, `mark()` stops with an error, which protects you from making code fast but wrong.
+
+`|> print()` at the end makes the browser show the result as plain text, so the expression names are visible. You do not need it on your own computer. In the browser, `mem_alloc` shows `NA` because webR cannot measure memory. On your own computer it shows the bytes used.
+
+### Profiling: which line is slow?
+
+::: {.callout-important}
+## Run this on your own computer
+For a longer script, a **profiler** records where the time goes. In RStudio:
+
+```r
+install.packages("profvis")
+profvis::profvis({
+  # paste the slow code here
+})
+```
+
+The result shows each line with the time spent on it. Look for the widest bars. Usually one or two lines take almost all the time. Speed those up and ignore the rest.
+:::
+
+## Vectorise
+
+R's built-in vector functions, such as `sum()`, `+`, `ifelse()` and `cumsum()`, loop in compiled C code. A loop you write in R does the same work one step at a time, with R checking types at each step. That is why vectorised code is often 10 to 100 times faster.
+
+```{webr}
+sizes <- sample(1:12, 1e4, replace = TRUE)
+
+loop_version <- function(sizes) {
+  out <- character(length(sizes))
+  for (i in seq_along(sizes)) {
+    out[i] <- if (sizes[i] > 6) "large" else "small"
+  }
+  out
+}
+
+vector_version <- function(sizes) ifelse(sizes > 6, "large", "small")
+
+bench::mark(loop_version(sizes), vector_version(sizes)) |> print()
+```
+
+Useful vectorised functions to remember:
+
+| Instead of a loop that… | Use |
+|---|---|
+| adds up or counts | `sum()`, `mean()`, `table()` |
+| keeps a running total | `cumsum()`, `cumprod()`, `cummax()` |
+| chooses between two values | `ifelse()` or `if_else()` |
+| chooses between many values | `case_when()` (Day 9) |
+| compares neighbouring values | `diff()`, `dplyr::lag()`, `dplyr::lead()` |
+| sums each row or column of numbers | `rowSums()`, `colSums()`, `rowMeans()` |
+| looks values up in a table | a join (Day 7) or `match()` |
+
+`map()` and `sapply()` are **not** faster than a well-written loop. They are clearer, but they still call an R function once per element. Their benefit is readability, not speed.
+
+## Do not grow objects
+
+Each time you add to a vector with `c()`, R makes a new vector one element longer and copies everything into it. In a loop, that means copying again and again:
+
+```{webr}
+grow <- function(n) {
+  out <- c()
+  for (i in 1:n) out <- c(out, i^2)
+  out
+}
+
+preallocate <- function(n) {
+  out <- numeric(n)          # make space for all n values first
+  for (i in 1:n) out[i] <- i^2
+  out
+}
+
+bench::mark(grow(5000), preallocate(5000), (1:5000)^2) |> print()
+```
+
+Look at the times. On your own computer, `mem_alloc` also shows that growing copies far more memory. The fully vectorised version is fastest of all.
+
+The same applies to data frames. Binding one row at a time with `rbind()` is very slow. Build a list of pieces and combine them once at the end:
+
+```{webr}
+pieces <- map(1:200, \(i) data.frame(id = i, value = i^2))
+result <- list_rbind(pieces)   # one bind, not 200
+nrow(result)
+```
+
+## Do less work
+
+- **Move repeated work out of loops.** If a value does not change inside the loop, calculate it once before the loop.
+- **Read only what you need.** `fread(file, select = c("a", "b"))` reads two columns instead of fifty.
+- **Filter early.** Drop rows you do not need before joining or summarising.
+- **Use a matrix for numbers only.** Matrix maths is much faster than the same work on a data frame.
+- **Save slow results.** If a step takes ten minutes and its input rarely changes, save the result with `saveRDS()` and read it back with `readRDS()`.
+
+## Large data with data.table
+
+dplyr is fast enough for most work. When a table has many millions of rows, **data.table** is often several times faster and uses less memory. It has its own compact syntax.
+
+### Reading and creating
+
+`fread()` reads CSV files very quickly and guesses the column types well. On your own computer, use it like this:
+
+```r
+dt <- fread("data/household-survey.csv")
+```
+
+You can also turn a data frame into a data.table:
+
+```{webr}
+dt <- as.data.table(hh)
+class(dt)
+dt
+```
+
+### The `DT[i, j, by]` form
+
+Almost everything in data.table uses one form, `DT[i, j, by]`. Read it as: "take `DT`, choose rows with `i`, then calculate `j`, grouped by `by`."
+
+| Part | Does | dplyr equivalent |
+|---|---|---|
+| `i` | choose rows | `filter()`, `arrange()` |
+| `j` | choose or calculate columns | `select()`, `summarise()`, `mutate()` |
+| `by` | group | `group_by()` |
+
+Inside the brackets, you can use column names directly:
+
+```{webr}
+dt[district == "Gulu"]                              # i: filter rows
+dt[, .(household_id, household_size)]               # j: select columns
+dt[, .(mean_size = mean(household_size))]           # j: summarise
+dt[, .(households = .N, mean_size = mean(household_size)), by = district]   # j by group
+dt[order(-monthly_income_ugx)][1:3]                 # sort, then take the first 3
+```
+
+`.()` is short for `list()`, and `.N` is the number of rows in each group.
+
+### Changing columns in place with `:=`
+
+`:=` adds or changes a column **in place**, without copying the table. Like R6 objects on Day 18, the data.table itself changes:
+
+```{webr}
+dt[, income_pp := monthly_income_ugx / household_size]
+dt[, size_group := fifelse(household_size > 6, "large", "small")]
+head(dt)
+```
+
+`fifelse()` is data.table's fast `ifelse()`. To keep the original, make a copy first with `copy(dt)`.
+
+### The same task in dplyr and data.table
+
+```{webr}
+# dplyr
+hh |>
+  filter(has_water == "yes") |>
+  group_by(district) |>
+  summarise(mean_income = mean(monthly_income_ugx, na.rm = TRUE))
+
+# data.table
+dt[has_water == "yes", .(mean_income = mean(monthly_income_ugx, na.rm = TRUE)), by = district]
+```
+
+Both give the same answer. Choose dplyr for readability and data.table for very large data. There is also **dtplyr**, which lets you write dplyr code that runs as data.table.
+
+### How much faster?
+
+```{webr}
+n <- 2e5
+big <- data.frame(
+  group = sample(letters, n, replace = TRUE),
+  value = runif(n)
+)
+big_dt <- as.data.table(big)
+
+bench::mark(
+  dplyr      = big |> group_by(group) |> summarise(m = mean(value)) |> as.data.frame(),
+  data.table = big_dt[, .(m = mean(value)), keyby = group] |> as.data.frame(),
+  check = FALSE,
+  iterations = 10
+) |> print()
+```
+
+`check = FALSE` is needed here because the two results are different classes. The gap grows as the data grows.
+
+## Beyond this lesson
+
+When vectorising and data.table are not enough:
+
+- **Parallel processing** runs work on several CPU cores at once. The **future** and **furrr** packages give you parallel versions of `map()`.
+- **Rcpp** lets you write the slow part in C++. It is worth learning when one tight loop cannot be vectorised.
+- **arrow** and **duckdb** work with data larger than your computer's memory.
+
+These run on your own computer, not in the browser.
+
+::: {.callout-tip}
+## Excel bridge
+A spreadsheet with thousands of `VLOOKUP()` formulas slows down because each one searches the table again. A join does the lookup once for every row. In the same way, a single vectorised R function does in one step what thousands of filled-down formulas do one cell at a time.
+:::
+
+## Exercises
+
+### Exercise 1: Vectorise a loop
+
+Replace the loop below with **one line** of vectorised code that gives the same result. Save it as `bands`.
+
+```{webr}
+#| exercise: ex19_vectorise
+#| setup: true
+incomes <- c(120000, 650000, 300000, 900000, 45000)
+loop_bands <- character(length(incomes))
+for (i in seq_along(incomes)) {
+  loop_bands[i] <- if (incomes[i] >= 500000) "high" else "low"
+}
+```
+
+```{webr}
+#| exercise: ex19_vectorise
+bands <- ifelse(______, ______, ______)
+bands
+```
+
+::: {.hint exercise="ex19_vectorise"}
+::: {.callout-note collapse="false"}
+## Hint
+`ifelse(test, yes, no)` works on the whole vector at once: the test is `incomes >= 500000`.
+:::
+:::
+
+::: {.solution exercise="ex19_vectorise"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+bands <- ifelse(incomes >= 500000, "high", "low")
+bands
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex19_vectorise
+#| check: true
+if (!exists("bands")) {
+  list(correct = FALSE, message = "Save the result as bands.")
+} else if (identical(bands, loop_bands)) {
+  list(correct = TRUE, message = "Correct. One line, and no loop.")
+} else {
+  list(correct = FALSE, message = "bands should match the loop: high when income is 500000 or more, low otherwise.")
+}
+```
+
+### Exercise 2: A running total
+
+This loop keeps a running total of interviews per day. Replace it with a single vectorised function. Save the result as `running`.
+
+```{webr}
+#| exercise: ex19_cumsum
+#| setup: true
+per_day <- c(4, 6, 3, 8, 5, 7)
+loop_total <- numeric(length(per_day))
+total <- 0
+for (i in seq_along(per_day)) {
+  total <- total + per_day[i]
+  loop_total[i] <- total
+}
+```
+
+```{webr}
+#| exercise: ex19_cumsum
+running <- ______(per_day)
+running
+```
+
+::: {.hint exercise="ex19_cumsum"}
+::: {.callout-note collapse="false"}
+## Hint
+A running ("cumulative") sum is `cumsum()`.
+:::
+:::
+
+::: {.solution exercise="ex19_cumsum"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+running <- cumsum(per_day)
+running
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex19_cumsum
+#| check: true
+if (!exists("running")) {
+  list(correct = FALSE, message = "Save the result as running.")
+} else if (identical(running, loop_total)) {
+  list(correct = TRUE, message = "Correct: 4, 10, 13, 21, 26, 33.")
+} else {
+  list(correct = FALSE, message = "Use cumsum(per_day).")
+}
+```
+
+### Exercise 3: Benchmark two versions
+
+Use `bench::mark()` to compare `grow(2000)` and `preallocate(2000)`. Name the two expressions `grow` and `preallocate`, and set `iterations = 20`. Save the result as `timings`.
+
+```{webr}
+#| exercise: ex19_bench
+#| setup: true
+library(bench)
+grow <- function(n) {
+  out <- c()
+  for (i in 1:n) out <- c(out, i^2)
+  out
+}
+preallocate <- function(n) {
+  out <- numeric(n)
+  for (i in 1:n) out[i] <- i^2
+  out
+}
+```
+
+```{webr}
+#| exercise: ex19_bench
+timings <- bench::mark(
+  grow        = ______,
+  preallocate = ______,
+  iterations  = 20
+)
+print(timings)
+```
+
+::: {.hint exercise="ex19_bench"}
+::: {.callout-note collapse="false"}
+## Hint
+Each named argument is the code to time: `grow = grow(2000)` and `preallocate = preallocate(2000)`.
+:::
+:::
+
+::: {.solution exercise="ex19_bench"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+timings <- bench::mark(
+  grow        = grow(2000),
+  preallocate = preallocate(2000),
+  iterations  = 20
+)
+print(timings)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex19_bench
+#| check: true
+if (!exists("timings") || !inherits(timings, "bench_mark")) {
+  list(correct = FALSE, message = "timings should be the result of bench::mark().")
+} else if (!identical(as.character(timings$expression), c("grow", "preallocate"))) {
+  list(correct = FALSE, message = "Name the two expressions grow and preallocate.")
+} else {
+  ratio <- as.numeric(timings$mem_alloc[1]) / max(as.numeric(timings$mem_alloc[2]), 1)
+  if (is.na(ratio)) {
+    list(correct = TRUE, message = "Correct. Compare the median times: growing is slower because it copies the vector again at every step.")
+  } else {
+    list(correct = TRUE, message = paste0("Correct. Growing used about ", round(ratio), " times as much memory as pre-allocating."))
+  }
+}
+```
+
+### Exercise 4: Summarise with data.table
+
+Use the `DT[i, j, by]` form to count households (`.N`) and find the mean `monthly_income_ugx` (ignoring missing values) **for each district**. Name the columns `households` and `mean_income`. Save the result as `by_district`.
+
+```{webr}
+#| exercise: ex19_dt
+#| setup: true
+library(data.table)
+dt <- fread("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex19_dt
+by_district <- dt[, .(
+  households  = ______,
+  mean_income = ______
+), by = ______]
+by_district
+```
+
+::: {.hint exercise="ex19_dt"}
+::: {.callout-note collapse="false"}
+## Hint
+`.N` counts rows. The mean is `mean(monthly_income_ugx, na.rm = TRUE)`. Group with `by = district`.
+:::
+:::
+
+::: {.solution exercise="ex19_dt"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+by_district <- dt[, .(
+  households  = .N,
+  mean_income = mean(monthly_income_ugx, na.rm = TRUE)
+), by = district]
+by_district
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex19_dt
+#| check: true
+hh_df <- read.csv("data/household-survey.csv")
+exp_n <- table(hh_df$district)
+exp_m <- tapply(hh_df$monthly_income_ugx, hh_df$district, mean, na.rm = TRUE)
+if (!exists("by_district") || !is.data.frame(by_district)) {
+  list(correct = FALSE, message = "Save the result as by_district.")
+} else if (!all(c("district", "households", "mean_income") %in% names(by_district))) {
+  list(correct = FALSE, message = "by_district needs the columns district, households and mean_income.")
+} else if (nrow(by_district) != length(exp_n)) {
+  list(correct = FALSE, message = "There should be one row per district. Add by = district.")
+} else {
+  o <- match(names(exp_n), by_district$district)
+  if (!isTRUE(all.equal(as.numeric(by_district$households[o]), as.numeric(exp_n)))) {
+    list(correct = FALSE, message = "households should be .N, the number of rows in each district.")
+  } else if (anyNA(by_district$mean_income)) {
+    list(correct = FALSE, message = "Some means are NA. Add na.rm = TRUE.")
+  } else if (!isTRUE(all.equal(by_district$mean_income[o], as.numeric(exp_m[names(exp_n)])))) {
+    list(correct = FALSE, message = "mean_income should be mean(monthly_income_ugx, na.rm = TRUE).")
+  } else {
+    list(correct = TRUE, message = "Correct. That is filter, group_by and summarise in one line.")
+  }
+}
+```
+
+### Exercise 5: Add a column in place
+
+Use `:=` to add a column `income_pp` to `dt`: monthly income divided by household size.
+
+```{webr}
+#| exercise: ex19_assign
+#| setup: true
+library(data.table)
+dt <- fread("data/household-survey.csv")
+```
+
+```{webr}
+#| exercise: ex19_assign
+dt[, ______ := ______]
+head(dt)
+```
+
+::: {.hint exercise="ex19_assign"}
+::: {.callout-note collapse="false"}
+## Hint
+The new column's name goes on the left of `:=` and the calculation on the right: `income_pp := monthly_income_ugx / household_size`.
+:::
+:::
+
+::: {.solution exercise="ex19_assign"}
+::: {.callout-tip collapse="false"}
+## Solution
+```r
+dt[, income_pp := monthly_income_ugx / household_size]
+head(dt)
+```
+:::
+:::
+
+```{webr}
+#| exercise: ex19_assign
+#| check: true
+if (!"income_pp" %in% names(dt)) {
+  list(correct = FALSE, message = "dt has no income_pp column. Use dt[, income_pp := ...].")
+} else if (isTRUE(all.equal(dt$income_pp, dt$monthly_income_ugx / dt$household_size))) {
+  list(correct = TRUE, message = "Correct. The column was added in place, without copying the table or assigning with <-.")
+} else {
+  list(correct = FALSE, message = "income_pp should be monthly_income_ugx / household_size.")
+}
+```
+
+## Your turn
+
+1. Write two versions of a function that returns the share of households above a size threshold: one with a `for` loop and one with `mean(sizes > threshold)`. Compare them with `bench::mark()` on a vector of a million values.
+2. Create a data.table with five million rows and two columns (a group and a value). Compare `dt[, mean(value), by = group]` with `tapply()` and with dplyr.
+3. On your own computer, profile a script from an earlier day with `profvis`. Which line takes the most time?
+
+```{webr}
+library(bench)
+library(data.table)
+library(dplyr)
+library(purrr)
+# Your code here
+
+```
+
+## Common mistakes
+
+- **Optimising without measuring.** Profile first. The slow part is rarely where you expect.
+- **Making code fast but wrong.** Let `bench::mark()` check that the versions give the same result.
+- **Growing vectors and data frames in a loop.** Pre-allocate with `numeric(n)` or `vector("list", n)`, or build a list and bind once.
+- **Thinking `sapply()` or `map()` is vectorised.** They are tidier loops, not faster ones.
+- **Forgetting that `:=` changes the table in place.** Use `copy(dt)` if you need the original.
+- **Using data.table syntax on a data frame.** `df[, .N, by = x]` only works after `as.data.table()`.
+
+## Summary
+
+- Measure first: `system.time()` for one run, `bench::mark()` to compare versions, `profvis` to find the slow line.
+- Vectorised functions loop in C and are much faster than R loops.
+- Never grow an object in a loop. Pre-allocate, or build a list and bind once.
+- Do less work: move constant work out of loops, read only the columns you need, filter early and save slow results.
+- data.table's `DT[i, j, by]` filters, calculates and groups in one step, and `:=` changes columns in place. Use it for very large data.
+
+**Next:** on Day 20 you will turn your functions into an R package with documentation and tests.
+
+## Further reading
+
+- [Advanced R (2e), chapter 23: Measuring performance](https://adv-r.hadley.nz/perf-measure.html) and [chapter 24: Improving performance](https://adv-r.hadley.nz/perf-improve.html), by Hadley Wickham.
+- [data.table: Introduction](https://rdatatable.gitlab.io/data.table/articles/datatable-intro.html), the package's own vignette.
+- [Efficient R Programming](https://csgillespie.github.io/efficientR/), by Colin Gillespie and Robin Lovelace. Free online.
